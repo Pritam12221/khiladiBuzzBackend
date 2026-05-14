@@ -1,10 +1,14 @@
 package models
 
+import (
+	"github.com/golang-jwt/jwt/v5"
+)
+
 type LoginRequest struct {
 	PhoneNumber string `json:"phone_number" db:"phone_number" binding:"required"`
 	Password    string `json:"password" db:"password" binding:"required"`
 }
-
+	
 type User struct {
 	ID          string `json:"id" db:"id"`
 	Name        string `json:"name" db:"name"`
@@ -15,7 +19,14 @@ type User struct {
 }
 
 type UserRequest struct {
-	Name string `json:"name" db:"name" binding:"required,min=3"`
-	Password string `json:"password" db:"password" binding:"required,min=6"`
+	Name        string `json:"name" db:"name" binding:"required,min=3"`
+	Password    string `json:"password" db:"password" binding:"required,min=6"`
 	PhoneNumber string `json:"phone_number" db:"phone_number" binding:"required"`
+}
+
+type Claims struct {
+	UserID   string `json:"user_id"`
+	SessionID string `json:"session_id"`
+
+	jwt.RegisteredClaims
 }

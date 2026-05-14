@@ -53,3 +53,39 @@ func CreateUserSession(userID string) (string, error) {
 	}
 	return sessionID, nil
 }
+
+func GetUserIDBySession(sessionID string) (string, error) {
+	var userID string
+
+	query := `
+		SELECT user_id 
+		FROM user_session 
+		WHERE id = $1 AND archived_at IS NULL
+	`
+
+	err := db.KhiladiDb.Get(&userID, query, sessionID)
+	return userID, err
+}
+
+
+func GetUserByID(userID string) (model.User, error) {
+
+	var user model.User
+
+	query := `
+		SELECT id
+		FROM users
+		WHERE id = $1 AND archived_at IS NULL
+	`
+
+	err := db.KhiladiDb.Get(&user, query, userID)
+	return user, err
+}
+
+func DeleteUserSession(sessionID string)error{
+
+	query:=`UPDATE user_session SET archived_at=NOW() where id=$1 and archived_at IS NULL`
+
+	_,err:=db.KhiladiDb.Exec(query,sessionID);
+	return  err;
+}

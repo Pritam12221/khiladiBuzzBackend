@@ -78,7 +78,7 @@ strike rate cont. min 4 ball
 
 (80-100)=-1;
 
-fibanaci series icremnet of strik(+ve)/(-ve)
+fibanaci series increament of strike(+ve)/(-ve)
 
 
 
@@ -94,7 +94,7 @@ goldenduck=-7
 
 
 
-**Universal:**
+**Universal :**
 
 catch =+3
 
