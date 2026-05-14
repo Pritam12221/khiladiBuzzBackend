@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
 func LoginUser(c *gin.Context) {
 	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,6 +43,7 @@ func LoginUser(c *gin.Context) {
 	})
 
 }
+
 
 
 func RegisterUser(c *gin.Context) {
@@ -92,6 +94,7 @@ func RegisterUser(c *gin.Context) {
 		"token":token,
 	})
 }
+
 
 
 func LogOutUser(c* gin.Context){

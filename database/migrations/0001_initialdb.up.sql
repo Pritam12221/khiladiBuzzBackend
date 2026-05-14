@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS players (
     user_id UUID REFERENCES users(id),
     player_name TEXT NOT NULL,
     phone_number VARCHAR(15),
-    role player_role_enum DEFAULT 'allrounder',
+    role x_role_enum DEFAULT 'allrounder',
     batting_style batting_style_enum ,
     bowling_style bowling_style_enum,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

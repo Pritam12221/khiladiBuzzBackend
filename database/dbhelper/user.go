@@ -34,6 +34,7 @@ func IsUserExist(phoneNumber string) (bool, error) {
 	return exists, err
 }
 
+
 func CreateUser(name, phoneNumber, password string) (string, error) {
 	query := `INSERT INTO users(name, phone_number, password)
 	VALUES ($1, TRIM(LOWER($2)), $3) RETURNING id;`
@@ -89,3 +90,5 @@ func DeleteUserSession(sessionID string)error{
 	_,err:=db.KhiladiDb.Exec(query,sessionID);
 	return  err;
 }
+
+
