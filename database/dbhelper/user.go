@@ -37,7 +37,7 @@ func IsUserExist(phoneNumber string) (bool, error) {
 
 func CreateUser(name, phoneNumber, password string) (string, error) {
 	query := `INSERT INTO users(name, phone_number, password)
-	VALUES ($1, TRIM(LOWER($2)), $3) RETURNING id;`
+	VALUES ($1, $2, $3) RETURNING id;`
 
 	var userID string
 	err := db.KhiladiDb.Get(&userID, query, name, phoneNumber, password)

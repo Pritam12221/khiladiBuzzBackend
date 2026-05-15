@@ -38,7 +38,8 @@ type Claims struct {
 type CreateTeamRequest struct {
 	TeamName string `json:"team_name" binding:"required"`
 	CaptainNumber string `json:"captain_number" binding:"required"`
-	CaptainName string `json:"captain_name" binding:"required"`
+	CaptainName   string `json:"captain_name"`
+	Players []CreatePlayerRequest `json:"players" binding:"required"`
 }
 
 type Team struct {
@@ -55,3 +56,8 @@ type Player struct {
 	PhoneNumber  *string `db:"phone_number" json:"phone_number"`
 }
 
+type CreatePlayerRequest struct {
+	PlayerName  string `json:"player_name" binding:"required"`
+	PhoneNumber string `json:"phone_number" binding:"required"`
+	Role        string `json:"role" `
+}

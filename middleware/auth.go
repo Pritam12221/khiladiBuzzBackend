@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"khiladiBuzz/database/dbhelper"
 	"khiladiBuzz/utils"
 	"net/http"
@@ -71,9 +72,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-
+		fmt.Println("in authMidd", userID)
 		c.Set("session_id", sessionID)
-		c.Set("user", user)
+		c.Set("user", user.ID)
 
 		c.Next()
 	}

@@ -12,53 +12,23 @@ func CreateTeam(c *gin.Context) {
 
 	var req models.CreateTeamRequest
 
-	// bind request body
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request body",
+			"error": err.Error(),
 		})
 		return
 	}
 
-	
-	captain, err := dbhelper.FindOrCreatePlayer(
-		req.CaptainName,
-		req.CaptainNumber,
-	)
+	userID := c.GetString("user")
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get captain player",
-		})
-		return
-	}
-
-	
-	userID := c.GetString("user_id")
-
-	// create team
-	teamID, err := dbhelper.CreateTeam(
-		req.TeamName,
-		captain.ID,
+	teamID, err := dbhelper.CreateTeamWithPlayers(
+		req,
 		userID,
 	)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to create team",
-		})
-		return
-	}
-
-	// add captain into team_players
-	err = dbhelper.AddPlayerToTeam(
-		teamID,
-		captain.ID,
-	)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to add captain to team",
+			"error": err.Error(),
 		})
 		return
 	}
@@ -68,3 +38,4 @@ func CreateTeam(c *gin.Context) {
 		"team_id": teamID,
 	})
 }
+

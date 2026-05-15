@@ -26,13 +26,13 @@ func ServerRoutes() *gin.Engine {
 	{
 		userRoutes.POST("/login", handlers.LoginUser)
 		userRoutes.POST("/register", handlers.RegisterUser)
-		userRoutes.POST("/teams", handlers.CreateTeam)
 	}
 
 	authRoutes:=r.Group("/v1")
 	authRoutes.Use(middleware.AuthMiddleware())
 	{
 			authRoutes.POST("/logout",handlers.LogOutUser)
+			authRoutes.POST("/teams", handlers.CreateTeam)
 	}
 
 	return r;
