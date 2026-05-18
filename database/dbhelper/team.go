@@ -57,6 +57,35 @@ func CreatePlayer(
 	return player, err
 }
 
+func CreatePlayerForUser(
+	name string,
+	phone string,
+	userID string,
+) (models.Player, error) {
+
+	var player models.Player
+
+	query := `
+		INSERT INTO players (
+			player_name,
+			phone_number,
+			user_id
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id, player_name, phone_number
+	`
+
+	err := db.KhiladiDb.Get(
+		&player,
+		query,
+		name,
+		phone,
+		userID,
+	)
+
+	return player, err
+}
+
 
 func FindOrCreatePlayer(
 	name string,
@@ -142,7 +171,7 @@ func CreateTeamWithPlayers(
 		phones = append(phones, p.PhoneNumber)
 	}
 
-	// fetch existing players
+	// fetch existing players [slice of player]
 	query, args, err := sqlx.In(`
 		SELECT id, player_name, phone_number
 		FROM players
