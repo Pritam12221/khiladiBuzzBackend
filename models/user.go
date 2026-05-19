@@ -48,16 +48,4 @@ type Team struct {
 	CaptainID  string `db:"captain_id" json:"captain_id"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
-}
-
-type Player struct {
-	ID           string  `db:"id" json:"id"`
-	PlayerName   string  `db:"player_name" json:"player_name"`
-	PhoneNumber  *string `db:"phone_number" json:"phone_number"`
-}
-
-type CreatePlayerRequest struct {
-	PlayerName  string `json:"player_name" binding:"required"`
-	PhoneNumber string `json:"phone_number" binding:"required"`
-	Role        string `json:"role" `
-}
+}
