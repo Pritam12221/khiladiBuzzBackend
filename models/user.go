@@ -48,4 +48,14 @@ type Team struct {
 	CaptainID  string `db:"captain_id" json:"captain_id"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type SendOtpRequest struct {
+	PhoneNumber string `json:"phone_number" binding:"required,len=10"`
+}
+
+type ForgotPasswordRequest struct {
+	PhoneNumber string `json:"phone_number" binding:"required,len=10"`
+	OTP         string `json:"otp" binding:"required,len=4"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	db "khiladiBuzz/database"
+	"khiladiBuzz/models"
 	model "khiladiBuzz/models"
 	"khiladiBuzz/utils"
 )
@@ -35,13 +36,80 @@ func IsUserExist(phoneNumber string) (bool, error) {
 }
 
 
-func CreateUser(name, phoneNumber, password string) (string, error) {
-	query := `INSERT INTO users(name, phone_number, password)
-	VALUES ($1, $2, $3) RETURNING id;`
+func CreateUser(
+	name string,
+	phoneNumber string,
+	password string,
+) (models.Player, error) {
+
+	tx, err := db.KhiladiDb.Beginx()
+
+	if err != nil {
+		return  models.Player{}, err
+	}
+
+	defer tx.Rollback()
+	var player models.Player
+
+	userQuery := `
+		INSERT INTO users (
+			name,
+			phone_number,
+			password
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`
 
 	var userID string
-	err := db.KhiladiDb.Get(&userID, query, name, phoneNumber, password)
-	return userID, err
+
+	err = tx.Get(
+		&userID,
+		userQuery,
+		name,
+		phoneNumber,
+		password,
+	)
+
+	if err != nil {
+		return player, err
+	}
+
+
+	playerQuery := `
+		INSERT INTO player_stats (
+			user_id
+		)
+		VALUES ($1)
+		RETURNING id
+	`
+
+	var playerStatsID string
+
+	err = tx.Get(
+		&playerStatsID,
+		playerQuery,
+		userID,
+	)
+
+	if err != nil {
+		return player, err
+	}
+	
+	player.ID = playerStatsID
+	player.PlayerName = name
+	player.PhoneNumber = &phoneNumber
+	player.UserID = &userID
+
+	err = tx.Commit()
+
+	if err != nil {
+		return player, err
+	}
+
+	
+
+	return player, nil;
 }
 
 func CreateUserSession(userID string) (string, error) {
@@ -89,6 +157,26 @@ func DeleteUserSession(sessionID string)error{
 
 	_,err:=db.KhiladiDb.Exec(query,sessionID);
 	return  err;
+}
+
+func UpdateUserPassword(phoneNumber string, hashedPassword string) error {
+	query := `
+		UPDATE users
+		SET password = $1, updated_at = NOW()
+		WHERE phone_number = $2 AND archived_at IS NULL
+	`
+	res, err := db.KhiladiDb.Exec(query, hashedPassword, phoneNumber)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }
 
 

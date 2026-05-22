@@ -5,7 +5,6 @@ import (
 	"fmt"
 	db "khiladiBuzz/database"
 	"khiladiBuzz/models"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -17,9 +16,10 @@ func GetPlayerByPhone(
 	var player models.Player
 
 	query := `
-		SELECT id, player_name, phone_number
-		FROM players
-		WHERE phone_number = $1
+		SELECT p.id, u.name AS player_name, u.phone_number, p.user_id, p.role, p.batting_style, p.bowling_style, p.created_at, p.updated_at
+		FROM player_stats p
+		JOIN users u ON p.user_id = u.id
+		WHERE u.phone_number = $1
 	`
 
 	err := db.KhiladiDb.Get(
@@ -57,35 +57,34 @@ func CreatePlayer(
 	return player, err
 }
 
-func CreatePlayerForUser(
-	name string,
-	phone string,
-	userID string,
-) (models.Player, error) {
+// func CreatePlayerForUser(
+// 	name string,
+// 	phone string,
+// 	userID string,
+// ) (models.Player, error) {
 
-	var player models.Player
+// 	var player models.Player
 
-	query := `
-		INSERT INTO players (
-			player_name,
-			phone_number,
-			user_id
-		)
-		VALUES ($1, $2, $3)
-		RETURNING id, player_name, phone_number
-	`
+// 	query := `
+// 		INSERT INTO players (
+// 			player_name,
+// 			phone_number,
+// 			user_id
+// 		)
+// 		VALUES ($1, $2, $3)
+// 		RETURNING id, player_name, phone_number
+// 	`
 
-	err := db.KhiladiDb.Get(
-		&player,
-		query,
-		name,
-		phone,
-		userID,
-	)
+// 	err := db.KhiladiDb.Get(
+// 		&player,
+// 		query,
+// 		name,
+// 		phone,
+// 		userID,
+// 	)
 
-	return player, err
-}
-
+// 	return player, err
+// }
 
 func FindOrCreatePlayer(
 	name string,
@@ -105,13 +104,12 @@ func FindOrCreatePlayer(
 	return player, err
 }
 
-
 func CreateTeam(
 	teamName string,
 	captainId string,
 	createdBy string,
 ) (string, error) {
-	fmt.Println("user",createdBy);
+	fmt.Println("user", createdBy)
 	var teamID string
 
 	query := `
@@ -130,10 +128,9 @@ func CreateTeam(
 		captainId,
 		createdBy,
 	).Scan(&teamID)
-		fmt.Print(err);
+	fmt.Print(err)
 	return teamID, err
 }
-
 
 func AddPlayerToTeam(
 	teamID string,
@@ -157,6 +154,177 @@ func AddPlayerToTeam(
 	return err
 }
 
+// func CreateTeamWithPlayers(
+// 	req models.CreateTeamRequest,
+// 	userID string,
+// ) (string, error) {
+
+// 	// collect phone numbers
+// 	phones := []string{}
+
+// 	for _, p := range req.Players {
+// 		phones = append(phones, p.PhoneNumber)
+// 	}
+
+// 	// fetch existing players [slice of player]
+// 	query, args, err := sqlx.In(`
+// 	SELECT 
+// 		p.id,
+// 		u.name AS player_name,
+// 		u.phone_number
+// 	FROM player_stats p
+// 	JOIN users u
+// 		ON p.user_id = u.id
+// 	WHERE u.phone_number IN (?)
+// 	`, phones)
+
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	query = db.KhiladiDb.Rebind(query)
+
+// 	var existingPlayers []models.Player
+
+// 	err = db.KhiladiDb.Select(
+// 		&existingPlayers,
+// 		query,
+// 		args...,
+// 	)
+
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	// phone -> player info
+// 	playerMap := map[string]models.Player{}
+
+// 	for _, p := range existingPlayers {
+// 		playerMap[*p.PhoneNumber] = p
+// 	}
+
+// 	// identify missing players
+// 	missingPlayers := []models.CreatePlayerRequest{}
+
+// 	for _, p := range req.Players {
+
+// 		_, exists := playerMap[p.PhoneNumber]
+
+// 		if !exists {
+// 			missingPlayers = append(
+// 				missingPlayers,
+// 				p,
+// 			)
+// 		}
+// 	}
+
+// 	// bulk insert missing players
+// 	if len(missingPlayers) > 0 {
+
+// 		values := []string{}
+// 		insertArgs := []interface{}{}
+
+// 		argPos := 1
+
+// 		for _, p := range missingPlayers {
+
+// 			values = append(
+// 				values,
+// 				fmt.Sprintf(
+// 					"($%d, $%d, $%d)",
+// 					argPos,
+// 					argPos+1,
+// 					argPos+2,
+// 				),
+// 			)
+
+// 			insertArgs = append(
+// 				insertArgs,
+// 				p.PlayerName,
+// 				p.PhoneNumber,
+// 				p.Role,
+// 			)
+
+// 			argPos += 3
+// 		}
+
+// 		insertQuery := fmt.Sprintf(`
+// 			INSERT INTO players (
+// 				player_name,
+// 				phone_number,
+// 				role
+// 			)
+// 			VALUES %s
+// 			RETURNING id, player_name, phone_number
+// 		`, strings.Join(values, ","))
+
+// 		var newPlayers []models.Player
+
+// 		err = db.KhiladiDb.Select(
+// 			&newPlayers,
+// 			insertQuery,
+// 			insertArgs...,
+// 		)
+
+// 		if err != nil {
+// 			return "", err
+// 		}
+
+// 		// merge newly created players
+// 		for _, p := range newPlayers {
+// 			playerMap[*p.PhoneNumber] = p
+// 		}
+// 	}
+
+// 	// determine captain id
+// 	var captainID string
+
+// 	for _, p := range req.Players {
+
+// 		if p.PhoneNumber == req.CaptainNumber {
+
+// 			player := playerMap[p.PhoneNumber]
+
+// 			captainID = player.ID
+// 			break
+// 		}
+// 	}
+
+// 	// captain validation
+// 	if captainID == "" {
+// 		return "", errors.New(
+// 			"captain must be part of players list",
+// 		)
+// 	}
+
+// 	// create team
+// 	teamID, err := CreateTeam(
+// 		req.TeamName,
+// 		captainID,
+// 		userID,
+// 	)
+
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	// add players to team_players
+// 	for _, p := range req.Players {
+
+// 		player := playerMap[p.PhoneNumber]
+
+// 		err = AddPlayerToTeam(
+// 			teamID,
+// 			player.ID,
+// 		)
+
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 	}
+
+// 	return teamID, nil
+// }
 
 
 func CreateTeamWithPlayers(
@@ -164,18 +332,29 @@ func CreateTeamWithPlayers(
 	userID string,
 ) (string, error) {
 
-	// collect phone numbers
+
+
 	phones := []string{}
 
 	for _, p := range req.Players {
-		phones = append(phones, p.PhoneNumber)
+
+		phones = append(
+			phones,
+			p.PhoneNumber,
+		)
 	}
 
-	// fetch existing players [slice of player]
+
 	query, args, err := sqlx.In(`
-		SELECT id, player_name, phone_number
-		FROM players
-		WHERE phone_number IN (?)
+		SELECT
+			p.id,
+			u.name AS player_name,
+			u.phone_number,
+			p.user_id
+		FROM player_stats p
+		JOIN users u
+			ON p.user_id = u.id
+		WHERE u.phone_number IN (?)
 	`, phones)
 
 	if err != nil {
@@ -196,14 +375,19 @@ func CreateTeamWithPlayers(
 		return "", err
 	}
 
-	// phone -> player info
+
+
 	playerMap := map[string]models.Player{}
 
 	for _, p := range existingPlayers {
-		playerMap[*p.PhoneNumber] = p
+
+		if p.PhoneNumber != nil {
+
+			playerMap[*p.PhoneNumber] = p
+		}
 	}
 
-	// identify missing players
+
 	missingPlayers := []models.CreatePlayerRequest{}
 
 	for _, p := range req.Players {
@@ -211,6 +395,7 @@ func CreateTeamWithPlayers(
 		_, exists := playerMap[p.PhoneNumber]
 
 		if !exists {
+
 			missingPlayers = append(
 				missingPlayers,
 				p,
@@ -218,65 +403,27 @@ func CreateTeamWithPlayers(
 		}
 	}
 
-	// bulk insert missing players
-	if len(missingPlayers) > 0 {
 
-		values := []string{}
-		insertArgs := []interface{}{}
+	for _, p := range missingPlayers {
 
-		argPos := 1
-
-		for _, p := range missingPlayers {
-
-			values = append(
-				values,
-				fmt.Sprintf(
-					"($%d, $%d, $%d)",
-					argPos,
-					argPos+1,
-					argPos+2,
-				),
-			)
-
-			insertArgs = append(
-				insertArgs,
-				p.PlayerName,
-				p.PhoneNumber,
-				p.Role,
-			)
-
-			argPos += 3
-		}
-
-		insertQuery := fmt.Sprintf(`
-			INSERT INTO players (
-				player_name,
-				phone_number,
-				role
-			)
-			VALUES %s
-			RETURNING id, player_name, phone_number
-		`, strings.Join(values, ","))
-
-		var newPlayers []models.Player
-
-		err = db.KhiladiDb.Select(
-			&newPlayers,
-			insertQuery,
-			insertArgs...,
+		newPlayer, err := CreateUser(
+			p.PlayerName,
+			p.PhoneNumber,
+			"",
 		)
 
 		if err != nil {
 			return "", err
 		}
 
-		// merge newly created players
-		for _, p := range newPlayers {
-			playerMap[*p.PhoneNumber] = p
+		if newPlayer.PhoneNumber != nil {
+
+			playerMap[*newPlayer.PhoneNumber] = newPlayer
 		}
 	}
 
-	// determine captain id
+
+
 	var captainID string
 
 	for _, p := range req.Players {
@@ -286,18 +433,20 @@ func CreateTeamWithPlayers(
 			player := playerMap[p.PhoneNumber]
 
 			captainID = player.ID
+
 			break
 		}
 	}
 
-	// captain validation
 	if captainID == "" {
+
 		return "", errors.New(
-			"captain must be part of players list",
+			"invalid captain",
 		)
 	}
 
-	// create team
+
+
 	teamID, err := CreateTeam(
 		req.TeamName,
 		captainID,
@@ -308,7 +457,8 @@ func CreateTeamWithPlayers(
 		return "", err
 	}
 
-	// add players to team_players
+
+
 	for _, p := range req.Players {
 
 		player := playerMap[p.PhoneNumber]
@@ -322,6 +472,18 @@ func CreateTeamWithPlayers(
 			return "", err
 		}
 	}
-
 	return teamID, nil
+}
+
+
+func FetchTeams(userID string) ([]models.Team, error) {
+	teams := []models.Team{}
+	query := `
+		SELECT id, team_name
+		FROM teams
+		WHERE created_by = $1
+		ORDER BY created_at DESC
+	`
+	err := db.KhiladiDb.Select(&teams, query, userID)
+	return teams, err
 }

@@ -39,3 +39,19 @@ func CreateTeam(c *gin.Context) {
 	})
 }
 
+func FetchTeams(c *gin.Context) {
+	userID := c.GetString("user")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	teams, err := dbhelper.FetchTeams(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, teams)
+}
+

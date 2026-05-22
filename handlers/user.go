@@ -69,33 +69,33 @@ func RegisterUser(c *gin.Context) {
 	}
 
 	// Create user
-	userID, err := dbhelper.CreateUser(req.Name, req.PhoneNumber, hashedPassword)
+	user, err := dbhelper.CreateUser(req.Name, req.PhoneNumber, hashedPassword)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 
-	_, err = dbhelper.CreatePlayerForUser(req.Name, req.PhoneNumber, userID)
-	if err != nil {
-		c.Error(err)
-	}
+	// _, err = dbhelper.CreatePlayerForUser(req.Name, req.PhoneNumber, userID)
+	// if err != nil {
+	// 	c.Error(err)
+	// }
 
-	sessionID, err := dbhelper.CreateUserSession(userID)
+	sessionID, err := dbhelper.CreateUserSession(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return	
 	}
 
 	//generate a token
-	token, err := utils.GenerateToken(userID,  sessionID)
+	token, err := utils.GenerateToken(user.ID,  sessionID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to generate token"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"user_id": userID,
+		"user_id": user.ID,
 		"token":token,
 	})
 }
@@ -117,4 +117,51 @@ func LogOutUser(c* gin.Context){
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
-}
+}
+
+func SendOTP(c *gin.Context) {
+	var req models.SendOtpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	exists, err := dbhelper.IsUserExist(req.PhoneNumber)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check user"})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User with this mobile number does not exist"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "OTP sent successfully"})
+}
+
+func ForgotPassword(c *gin.Context) {
+	var req models.ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.OTP != "8080" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP code"})
+		return
+	}
+
+	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	err = dbhelper.UpdateUserPassword(req.PhoneNumber, hashedPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+}

@@ -26,6 +26,8 @@ func ServerRoutes() *gin.Engine {
 	{
 		userRoutes.POST("/login", handlers.LoginUser)
 		userRoutes.POST("/register", handlers.RegisterUser)
+		userRoutes.POST("/send-otp", handlers.SendOTP)
+		userRoutes.POST("/forgot-password", handlers.ForgotPassword)
 	}
 
 	authRoutes:=r.Group("/v1")
@@ -33,8 +35,9 @@ func ServerRoutes() *gin.Engine {
 	{
 			authRoutes.POST("/logout",handlers.LogOutUser)
 			authRoutes.POST("/teams", handlers.CreateTeam)
+			authRoutes.GET("/fetchteams", handlers.FetchTeams)
 			authRoutes.GET("/profile", handlers.GetProfile)
-			authRoutes.PUT("/profile", handlers.UpdateProfile)
+			authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
 	}
 
 	return r;
