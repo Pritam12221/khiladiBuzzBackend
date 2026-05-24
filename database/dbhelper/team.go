@@ -487,3 +487,24 @@ func FetchTeams(userID string) ([]models.Team, error) {
 	err := db.KhiladiDb.Select(&teams, query, userID)
 	return teams, err
 }
+
+func FetchTeamPlayers(teamID string) ([]models.Player, error) {
+	players := []models.Player{}
+	query := `
+		SELECT
+			p.id,
+			u.name  AS player_name,
+			u.phone_number,
+			p.user_id,
+			p.role,
+			p.batting_style,
+			p.bowling_style
+		FROM team_players tp
+		JOIN player_stats p ON tp.player_id = p.id
+		JOIN users u ON p.user_id = u.id
+		WHERE tp.team_id = $1
+		ORDER BY u.name ASC
+	`
+	err := db.KhiladiDb.Select(&players, query, teamID)
+	return players, err
+}

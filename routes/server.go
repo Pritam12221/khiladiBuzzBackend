@@ -36,6 +36,7 @@ func ServerRoutes() *gin.Engine {
 			authRoutes.POST("/logout",handlers.LogOutUser)
 			authRoutes.POST("/teams", handlers.CreateTeam)
 			authRoutes.GET("/fetchteams", handlers.FetchTeams)
+			authRoutes.GET("/teams/:id/players", handlers.GetTeamPlayers)
 			authRoutes.GET("/profile", handlers.GetProfile)
 			authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
 	}

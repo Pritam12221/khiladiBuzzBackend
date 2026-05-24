@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"khiladiBuzz/database/dbhelper"
 	"khiladiBuzz/models"
 	"net/http"
@@ -54,4 +55,22 @@ func FetchTeams(c *gin.Context) {
 
 	c.JSON(http.StatusOK, teams)
 }
+
+func GetTeamPlayers(c *gin.Context) {
+	teamID := c.Param("id")
+	if teamID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "team id is required"})
+		return
+	}
+
+	players, err := dbhelper.FetchTeamPlayers(teamID)
+	fmt.Print(players)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, players)
+}
+
 

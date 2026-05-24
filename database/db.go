@@ -43,7 +43,7 @@ func migrateUp(db *sqlx.DB) error {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://C:/Users/Pritam/Desktop/khiladiBuzz/khiladiBuzzBackend/database/migrations",
+		"file://../database/migrations",
 		"postgres",
 		driver,
 	)
