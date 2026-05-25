@@ -39,6 +39,7 @@ func ServerRoutes() *gin.Engine {
 			authRoutes.GET("/teams/:id/players", handlers.GetTeamPlayers)
 			authRoutes.GET("/profile", handlers.GetProfile)
 			authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
+			authRoutes.POST("/matches", handlers.CreateMatch)
 	}
 
 	return r;
