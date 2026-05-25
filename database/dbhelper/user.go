@@ -172,10 +172,8 @@ func UpdateUserPassword(phoneNumber string, hashedPassword string) error {
 	return nil
 }
 
-// SearchPlayers searches registered players by name (case-insensitive) or
-// phone number. The requesting user (excludeUserID) is excluded from results.
-// Returns up to 20 matches.
-func SearchPlayers(q string, excludeUserID string) ([]models.Player, error) {
+
+func SearchPlayers(q string) ([]models.Player, error) {
 	players := []models.Player{}
 
 	query := `
@@ -191,15 +189,13 @@ func SearchPlayers(q string, excludeUserID string) ([]models.Player, error) {
 		JOIN users u ON p.user_id = u.id
 		WHERE
 			u.archived_at IS NULL
-			AND u.id != $1
 			AND (
-				u.name ILIKE '%' || $2 || '%'
-				OR u.phone_number LIKE '%' || $2 || '%'
+				u.name ILIKE '%' || $1 || '%'
+				OR u.phone_number LIKE '%' || $1 || '%'
 			)
 		ORDER BY u.name ASC
-		LIMIT 20
 	`
 
-	err := db.KhiladiDb.Select(&players, query, excludeUserID, q)
+	err := db.KhiladiDb.Select(&players, query, q)
 	return players, err
 }

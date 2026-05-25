@@ -61,7 +61,7 @@ func SearchPlayers(c *gin.Context) {
 		return
 	}
 
-	players, err := dbhelper.SearchPlayers(q, userID)
+	players, err := dbhelper.SearchPlayers(q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
