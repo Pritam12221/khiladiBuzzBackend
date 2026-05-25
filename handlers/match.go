@@ -24,7 +24,7 @@ func CreateMatch(c *gin.Context) {
 		return
 	}
 
-	matchID, err := dbhelper.CreateMatch(req)
+	matchID, err := dbhelper.CreateMatch(req,userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),

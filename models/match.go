@@ -9,5 +9,5 @@ type CreateMatchRequest struct {
 	Status           string   `json:"status" db:"status" binding:"required,oneof=scheduled live completed cancelled"`
 	Team1PlayerIDs   []string `json:"team1_player_ids" binding:"required"`
 	Team2PlayerIDs   []string `json:"team2_player_ids" binding:"required"`
-	CommonPlayerID   string   `json:"common_player_id"`
+	CommonPlayerID  string   `json:"common_player_id"`
 }
