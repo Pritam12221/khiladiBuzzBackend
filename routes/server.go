@@ -40,6 +40,7 @@ func ServerRoutes() *gin.Engine {
 			authRoutes.GET("/profile", handlers.GetProfile)
 			authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
 			authRoutes.POST("/matches", handlers.CreateMatch)
+			authRoutes.GET("/players/search", handlers.SearchPlayers)
 	}
 
 	return r;

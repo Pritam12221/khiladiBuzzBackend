@@ -18,8 +18,8 @@ func CreateMatch(req models.CreateMatchRequest) (string, error) {
 	defer tx.Rollback()
 
 	// get captains
-	var team1CaptainID, team2CaptainID ,matchID string
-	var commonPlayerID string
+	var team1CaptainID, team2CaptainID ,matchID,commonPlayerID string
+
 	captainQuery := `SELECT captain_id FROM teams WHERE id = $1`
 
 	if err = tx.Get(&team1CaptainID, captainQuery, req.Team1ID); err != nil {
@@ -31,7 +31,7 @@ func CreateMatch(req models.CreateMatchRequest) (string, error) {
 
 	//get common player
 
-	fmt.Printf("common pl", req.CommonPlayerID)
+	fmt.Print("common pl",commonPlayerID)
 
 	if req.CommonPlayerID != "" {
 		commonPlayerID = req.CommonPlayerID

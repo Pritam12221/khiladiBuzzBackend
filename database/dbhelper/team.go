@@ -416,9 +416,39 @@ func CreateTeamWithPlayers(
 			return "", err
 		}
 
-		if newPlayer.PhoneNumber != nil {
 
+		if p.Role != "" {
+			_, err = db.KhiladiDb.Exec(
+				`UPDATE player_stats SET role = $1 WHERE id = $2`,
+				p.Role,
+				newPlayer.ID,
+			)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		if newPlayer.PhoneNumber != nil {
 			playerMap[*newPlayer.PhoneNumber] = newPlayer
+		}
+	}
+
+
+	for _, p := range req.Players {
+		if p.Role == "" {
+			continue
+		}
+		player, exists := playerMap[p.PhoneNumber]
+		if !exists {
+			continue
+		}
+		_, err = db.KhiladiDb.Exec(
+			`UPDATE player_stats SET role = $1 WHERE id = $2`,
+			p.Role,
+			player.ID,
+		)
+		if err != nil {
+			return "", err
 		}
 	}
 

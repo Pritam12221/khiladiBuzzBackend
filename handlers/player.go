@@ -4,6 +4,7 @@ import (
 	"khiladiBuzz/database/dbhelper"
 	"khiladiBuzz/models"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,4 +45,27 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "profile updated successfully"})
+}
+
+
+func SearchPlayers(c *gin.Context) {
+	userID := c.GetString("user")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	q := strings.TrimSpace(c.Query("q"))
+	if len(q) < 2 {
+		c.JSON(http.StatusOK, gin.H{"players": []interface{}{}})
+		return
+	}
+
+	players, err := dbhelper.SearchPlayers(q, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"players": players})
 }

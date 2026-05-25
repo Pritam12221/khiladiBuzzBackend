@@ -35,7 +35,6 @@ func IsUserExist(phoneNumber string) (bool, error) {
 	return exists, err
 }
 
-
 func CreateUser(
 	name string,
 	phoneNumber string,
@@ -45,7 +44,7 @@ func CreateUser(
 	tx, err := db.KhiladiDb.Beginx()
 
 	if err != nil {
-		return  models.Player{}, err
+		return models.Player{}, err
 	}
 
 	defer tx.Rollback()
@@ -75,7 +74,6 @@ func CreateUser(
 		return player, err
 	}
 
-
 	playerQuery := `
 		INSERT INTO player_stats (
 			user_id
@@ -95,7 +93,7 @@ func CreateUser(
 	if err != nil {
 		return player, err
 	}
-	
+
 	player.ID = playerStatsID
 	player.PlayerName = name
 	player.PhoneNumber = &phoneNumber
@@ -107,9 +105,7 @@ func CreateUser(
 		return player, err
 	}
 
-	
-
-	return player, nil;
+	return player, nil
 }
 
 func CreateUserSession(userID string) (string, error) {
@@ -136,7 +132,6 @@ func GetUserIDBySession(sessionID string) (string, error) {
 	return userID, err
 }
 
-
 func GetUserByID(userID string) (model.User, error) {
 
 	var user model.User
@@ -151,12 +146,10 @@ func GetUserByID(userID string) (model.User, error) {
 	return user, err
 }
 
-func DeleteUserSession(sessionID string)error{
-
-	query:=`UPDATE user_session SET archived_at=NOW() where id=$1 and archived_at IS NULL`
-
-	_,err:=db.KhiladiDb.Exec(query,sessionID);
-	return  err;
+func DeleteUserSession(sessionID string) error {
+	query := `UPDATE user_session SET archived_at=NOW() where id=$1 and archived_at IS NULL`
+	_, err := db.KhiladiDb.Exec(query, sessionID)
+	return err
 }
 
 func UpdateUserPassword(phoneNumber string, hashedPassword string) error {
@@ -179,5 +172,34 @@ func UpdateUserPassword(phoneNumber string, hashedPassword string) error {
 	return nil
 }
 
+// SearchPlayers searches registered players by name (case-insensitive) or
+// phone number. The requesting user (excludeUserID) is excluded from results.
+// Returns up to 20 matches.
+func SearchPlayers(q string, excludeUserID string) ([]models.Player, error) {
+	players := []models.Player{}
 
+	query := `
+		SELECT
+			p.id,
+			u.name  AS player_name,
+			u.phone_number,
+			p.user_id,
+			p.role,
+			p.batting_style,
+			p.bowling_style
+		FROM player_stats p
+		JOIN users u ON p.user_id = u.id
+		WHERE
+			u.archived_at IS NULL
+			AND u.id != $1
+			AND (
+				u.name ILIKE '%' || $2 || '%'
+				OR u.phone_number LIKE '%' || $2 || '%'
+			)
+		ORDER BY u.name ASC
+		LIMIT 20
+	`
 
+	err := db.KhiladiDb.Select(&players, query, excludeUserID, q)
+	return players, err
+}

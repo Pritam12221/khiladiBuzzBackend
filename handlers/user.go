@@ -76,19 +76,15 @@ func RegisterUser(c *gin.Context) {
 	}
 
 
-	// _, err = dbhelper.CreatePlayerForUser(req.Name, req.PhoneNumber, userID)
-	// if err != nil {
-	// 	c.Error(err)
-	// }
 
-	sessionID, err := dbhelper.CreateUserSession(user.ID)
+	sessionID, err := dbhelper.CreateUserSession(*user.UserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return	
 	}
 
 	//generate a token
-	token, err := utils.GenerateToken(user.ID,  sessionID)
+	token, err := utils.GenerateToken(*user.UserID, sessionID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to generate token"})
 		return
