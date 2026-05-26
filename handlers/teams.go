@@ -73,4 +73,26 @@ func GetTeamPlayers(c *gin.Context) {
 	c.JSON(http.StatusOK, players)
 }
 
+func AddPlayerToTeam(c *gin.Context) {
+	teamID := c.Param("id")
+	if teamID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "team id is required"})
+		return
+	}
+
+	var req models.CreatePlayerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	player, err := dbhelper.FindOrCreatePlayerForTeam(req.PlayerName, req.PhoneNumber, req.Role, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, player)
+}
+
 

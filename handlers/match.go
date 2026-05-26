@@ -24,7 +24,7 @@ func CreateMatch(c *gin.Context) {
 		return
 	}
 
-	matchID, err := dbhelper.CreateMatch(req,userID)
+	matchID, inningsID, err := dbhelper.CreateMatch(req, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -33,7 +33,8 @@ func CreateMatch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":  "match created successfully",
-		"match_id": matchID,
+		"message":    "match created successfully",
+		"match_id":   matchID,
+		"innings_id": inningsID,
 	})
 }

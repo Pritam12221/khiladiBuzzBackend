@@ -366,3 +366,54 @@ func FetchTeamPlayers(teamID string) ([]models.Player, error) {
 	err := db.KhiladiDb.Select(&players, query, teamID)
 	return players, err
 }
+
+func FindOrCreatePlayerForTeam(
+	name string,
+	phone string,
+	role string,
+	teamID string,
+) (models.Player, error) {
+	var player models.Player
+
+	// Search player_stats + users by phone
+	query := `
+		SELECT p.id, u.name AS player_name, u.phone_number, p.user_id, p.role
+		FROM player_stats p
+		JOIN users u ON p.user_id = u.id
+		WHERE u.phone_number = $1
+	`
+	err := db.KhiladiDb.Get(&player, query, phone)
+
+	if err != nil {
+		player, err = CreateUser(name, phone, "")
+		if err != nil {
+			return models.Player{}, err
+		}
+	}
+
+	// Update role if requested
+	if role != "" {
+		_, err = db.KhiladiDb.Exec(
+			`UPDATE player_stats SET role = $1 WHERE id = $2`,
+			role,
+			player.ID,
+		)
+		if err != nil {
+			return models.Player{}, err
+		}
+		player.Role = &role
+	}
+
+	// Link them to the team in team_players
+	var exists bool
+	checkQuery := `SELECT COUNT(*) > 0 FROM team_players WHERE team_id = $1 AND player_id = $2`
+	err = db.KhiladiDb.Get(&exists, checkQuery, teamID, player.ID)
+	if err == nil && !exists {
+		err = AddPlayerToTeam(teamID, player.ID)
+		if err != nil {
+			return models.Player{}, fmt.Errorf("failed to link player to team: %w", err)
+		}
+	}
+
+	return player, nil
+}
