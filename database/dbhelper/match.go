@@ -5,9 +5,11 @@ import (
 	db "khiladiBuzz/database"
 	"khiladiBuzz/models"
 	"strings"
+
+	"github.com/jmoiron/sqlx"
 )
 
-func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, error) {
+func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string, error) {
 
 	tx, err := db.KhiladiDb.Beginx()
 	if err != nil {
@@ -15,7 +17,7 @@ func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, 
 	}
 	defer tx.Rollback()
 
-	//  get captains 
+	//  get captains
 	var team1CaptainID, team2CaptainID, matchID string
 	var commonPlayerID *string
 
@@ -32,7 +34,7 @@ func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, 
 		commonPlayerID = &req.CommonPlayerID
 	}
 
-	// insert match 
+	// insert match
 	matchQuery := `
 		INSERT INTO matches (
 			team1_id,
@@ -70,18 +72,58 @@ func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, 
 		return "", "", fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// insert into match player(player who are playing in match)
+	// insert match players using extracted helper
+	err = AddMatchPlayersTx(tx, matchID, req.Team1ID, req.Team1PlayerIDs, req.Team2ID, req.Team2PlayerIDs)
+	if err != nil {
+		return "", "", err
+	}
+
+	//toss decide
+	var battingTeamID, bowlingTeamID string
+
+	if req.TossDecision == "bat" {
+		battingTeamID = req.TossWinnerTeamID
+		if req.TossWinnerTeamID == req.Team1ID {
+			bowlingTeamID = req.Team2ID
+		} else {
+			bowlingTeamID = req.Team1ID
+		}
+	} else {
+		if req.TossWinnerTeamID == req.Team1ID {
+			battingTeamID = req.Team2ID
+			bowlingTeamID = req.Team1ID
+		} else {
+			battingTeamID = req.Team1ID
+			bowlingTeamID = req.Team2ID
+		}
+	}
+
+	// create innings using extracted helper
+	inningsID, err := CreateInningsTx(tx, matchID, 1, battingTeamID, bowlingTeamID, "live")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create innings: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return "", "", err
+	}
+
+	return matchID, inningsID, nil
+}
+
+// AddMatchPlayersTx inserts the selected squad players for both teams into the match_players table within a transaction
+func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerIDs []string, team2ID string, team2PlayerIDs []string) error {
 	type playerSlot struct {
 		teamID   string
 		playerID string
 	}
 
 	var slots []playerSlot
-	for _, pid := range req.Team1PlayerIDs {
-		slots = append(slots, playerSlot{req.Team1ID, pid})
+	for _, pid := range team1PlayerIDs {
+		slots = append(slots, playerSlot{team1ID, pid})
 	}
-	for _, pid := range req.Team2PlayerIDs {
-		slots = append(slots, playerSlot{req.Team2ID, pid})
+	for _, pid := range team2PlayerIDs {
+		slots = append(slots, playerSlot{team2ID, pid})
 	}
 
 	if len(slots) > 0 {
@@ -101,64 +143,11 @@ func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, 
 			ON CONFLICT (match_id, team_id, player_id) DO NOTHING
 		`, strings.Join(values, ", "))
 
-		_, err = tx.Exec(insertPlayersQuery, args...)
+		_, err := tx.Exec(insertPlayersQuery, args...)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to insert match players: %w", err)
+			return fmt.Errorf("failed to insert match players: %w", err)
 		}
 	}
 
-	//toss decide
-	var battingTeamID, bowlingTeamID string
-
-	if req.TossDecision == "bat" {
-		
-		battingTeamID = req.TossWinnerTeamID
-		if req.TossWinnerTeamID == req.Team1ID {
-			bowlingTeamID = req.Team2ID
-		} else {
-			bowlingTeamID = req.Team1ID
-		}
-	} else {
-		if req.TossWinnerTeamID == req.Team1ID {
-			battingTeamID = req.Team2ID
-			bowlingTeamID = req.Team1ID
-		} else {
-			battingTeamID = req.Team1ID
-			bowlingTeamID = req.Team2ID
-		}
-	}
-
-	// create innings 
-	var inningsID string
-	inningsQuery := `
-		INSERT INTO innings (
-			match_id,
-			innings_number,
-			batting_team_id,
-			bowling_team_id,
-			status
-		)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`
-
-	err = tx.Get(
-		&inningsID,
-		inningsQuery,
-		matchID,
-		1,
-		battingTeamID,
-		bowlingTeamID,
-		"live",
-	)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create innings: %w", err)
-	}
-
-	
-	if err = tx.Commit(); err != nil {
-		return "", "", err
-	}
-
-	return matchID, inningsID, nil
+	return nil
 }

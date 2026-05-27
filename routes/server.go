@@ -33,15 +33,39 @@ func ServerRoutes() *gin.Engine {
 	authRoutes:=r.Group("/v1")
 	authRoutes.Use(middleware.AuthMiddleware())
 	{
-			authRoutes.POST("/logout",handlers.LogOutUser)
-			authRoutes.POST("/teams", handlers.CreateTeam)
-			authRoutes.GET("/fetchteams", handlers.FetchTeams)
-			authRoutes.GET("/teams/:id/players", handlers.GetTeamPlayers)
-			authRoutes.POST("/teams/:id/players", handlers.AddPlayerToTeam)
-			authRoutes.GET("/profile", handlers.GetProfile)
-			authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
-			authRoutes.POST("/matches", handlers.CreateMatch)
-			authRoutes.GET("/players/search", handlers.SearchPlayers)
+		
+		authRoutes.POST("/logout", handlers.LogOutUser)
+		authRoutes.GET("/profile", handlers.GetProfile)
+		authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
+		authRoutes.GET("/fetchteams", handlers.FetchTeams)
+
+		// Teams 
+		teams := authRoutes.Group("/teams")
+		{
+			teams.POST("", handlers.CreateTeam)
+			teams.GET("/:id/players", handlers.GetTeamPlayers)
+			teams.POST("/:id/players", handlers.AddPlayerToTeam)
+		}
+
+		// Matches 
+		matches := authRoutes.Group("/matches")
+		{
+			matches.POST("", handlers.CreateMatch)
+			matches.POST("/:id/innings", handlers.CreateInnings)
+			matches.POST("/:id/innings/:innings_id/ball", handlers.RecordBall)
+		}
+
+		// Innings 
+		innings := authRoutes.Group("/innings")
+		{
+			innings.GET("/:id/players", handlers.GetInningsPlayers)
+		}
+
+		// Players 
+		players := authRoutes.Group("/players")
+		{
+			players.GET("/search", handlers.SearchPlayers)
+		}
 	}
 
 	return r;
