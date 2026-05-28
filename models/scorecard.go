@@ -8,6 +8,7 @@ type BatsmanRow struct {
 	Sixes         int     `json:"sixes"`
 	SR            string  `json:"sr"`
 	IsActive      bool    `json:"isActive,omitempty"`
+	IsStriker     bool    `json:"isStriker,omitempty"`
 	IsNotOut      bool    `json:"isNotOut"`
 	DismissalType *string `json:"dismissalType,omitempty"`
 	BowlerName    *string `json:"bowlerName,omitempty"`

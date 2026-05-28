@@ -375,8 +375,10 @@ func formatBattingStats(batStats []models.BatStat, orderedBatsmenIDs []string, s
 			}
 
 			isActive := false
+			isStriker := false
 			if activeStrikerID != nil && *activeStrikerID == b.PlayerID {
 				isActive = true
+				isStriker = true
 			}
 			if activeNonStrikerID != nil && *activeNonStrikerID == b.PlayerID {
 				isActive = true
@@ -390,6 +392,7 @@ func formatBattingStats(batStats []models.BatStat, orderedBatsmenIDs []string, s
 				Sixes:         b.Sixes,
 				SR:            sr,
 				IsActive:      isActive,
+				IsStriker:     isStriker,
 				IsNotOut:      b.IsNotOut,
 				DismissalType: b.DismissalType,
 				BowlerName:    b.DismissedBy,

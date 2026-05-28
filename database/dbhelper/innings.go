@@ -668,6 +668,6 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 		)
 	}
 
+
 	return tx.Commit()
 }
-
