@@ -10,6 +10,9 @@ type CreateMatchRequest struct {
 	Team1PlayerIDs   []string `json:"team1_player_ids" binding:"required"`
 	Team2PlayerIDs   []string `json:"team2_player_ids" binding:"required"`
 	CommonPlayerID   string   `json:"common_player_id"`
+	StrikerID        string   `json:"striker_id"`
+	NonStrikerID     string   `json:"non_striker_id"`
+	BowlerID         string   `json:"bowler_id"`
 }
 
 
@@ -53,4 +56,33 @@ type CreateInningsRequest struct {
 	BattingTeamID string `json:"batting_team_id" binding:"required"`
 	BowlingTeamID string `json:"bowling_team_id" binding:"required"`
 	Status        string `json:"status" binding:"required,oneof=live completed"`
+	StrikerID     string `json:"striker_id"`
+	NonStrikerID  string `json:"non_striker_id"`
+	BowlerID      string `json:"bowler_id"`
+}
+
+type UpdateActivePlayersRequest struct {
+	ActiveStrikerID    *string `json:"active_striker_id"`
+	ActiveNonStrikerID *string `json:"active_non_striker_id"`
+	ActiveBowlerID     *string `json:"active_bowler_id"`
+}
+
+type MatchListItem struct {
+	ID               string   `json:"id" db:"id"`
+	Team1Name        string   `json:"team1_name" db:"team1_name"`
+	Team2Name        string   `json:"team2_name" db:"team2_name"`
+	Team1ID          string   `json:"team1_id" db:"team1_id"`
+	Team2ID          string   `json:"team2_id" db:"team2_id"`
+	Status           string   `json:"status" db:"status"`
+	TotalOvers       int      `json:"total_overs" db:"total_overs"`
+	MatchDate        *string  `json:"match_date" db:"match_date"`
+	TossWinnerTeamID *string  `json:"toss_winner_team_id" db:"toss_winner_team_id"`
+	TossDecision     *string  `json:"toss_decision" db:"toss_decision"`
+	WinnerTeamID     *string  `json:"winner_team_id" db:"winner_team_id"`
+	Innings1Runs     *int     `json:"innings1_runs" db:"innings1_runs"`
+	Innings1Wickets  *int     `json:"innings1_wickets" db:"innings1_wickets"`
+	Innings1Overs    *float64 `json:"innings1_overs" db:"innings1_overs"`
+	Innings2Runs     *int     `json:"innings2_runs" db:"innings2_runs"`
+	Innings2Wickets  *int     `json:"innings2_wickets" db:"innings2_wickets"`
+	Innings2Overs    *float64 `json:"innings2_overs" db:"innings2_overs"`
 }

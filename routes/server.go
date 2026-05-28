@@ -51,8 +51,11 @@ func ServerRoutes() *gin.Engine {
 		matches := authRoutes.Group("/matches")
 		{
 			matches.POST("", handlers.CreateMatch)
+			matches.GET("", handlers.FetchAllMatches)
+			matches.GET("/:id/scorecard", handlers.GetMatchScorecard)
 			matches.POST("/:id/innings", handlers.CreateInnings)
 			matches.POST("/:id/innings/:innings_id/ball", handlers.RecordBall)
+			matches.PUT("/:id/innings/:innings_id/active-players", handlers.UpdateActivePlayers)
 		}
 
 		// Innings 

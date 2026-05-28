@@ -83,3 +83,17 @@ func RecordBall(c *gin.Context) {
 	})
 }
 
+// FetchAllMatches returns all matches in the database for the spectator dashboard.
+func FetchAllMatches(c *gin.Context) {
+	matches, err := dbhelper.FetchAllMatches()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, matches)
+}
+
+
+
+
+

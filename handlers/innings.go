@@ -15,7 +15,7 @@ func GetInningsPlayers(c *gin.Context) {
 		return
 	}
 
-	battingPlayers, bowlingPlayers, battingTeamName, bowlingTeamName, battingTeamID, bowlingTeamID, matchID, err := dbhelper.FetchInningsPlayers(inningsID)
+	battingPlayers, bowlingPlayers, battingTeamName, bowlingTeamName, battingTeamID, bowlingTeamID, matchID, inningsNumber, matchStatus, err := dbhelper.FetchInningsPlayers(inningsID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -23,6 +23,8 @@ func GetInningsPlayers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"match_id":          matchID,
+		"innings_number":    inningsNumber,
+		"match_status":      matchStatus,
 		"batting_team_id":   battingTeamID,
 		"bowling_team_id":   bowlingTeamID,
 		"batting_team_name": battingTeamName,
@@ -47,7 +49,7 @@ func CreateInnings(c *gin.Context) {
 		return
 	}
 
-	inningsID, err := dbhelper.CreateInnings(matchID, req.InningsNumber, req.BattingTeamID, req.BowlingTeamID, req.Status)
+	inningsID, err := dbhelper.CreateInnings(matchID, req.InningsNumber, req.BattingTeamID, req.BowlingTeamID, req.Status, req.StrikerID, req.NonStrikerID, req.BowlerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -57,4 +59,26 @@ func CreateInnings(c *gin.Context) {
 		"message":    "innings created successfully",
 		"innings_id": inningsID,
 	})
+}
+
+func UpdateActivePlayers(c *gin.Context) {
+	inningsID := c.Param("innings_id")
+	if inningsID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "innings id is required"})
+		return
+	}
+
+	var req models.UpdateActivePlayersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := dbhelper.UpdateActivePlayers(inningsID, req.ActiveStrikerID, req.ActiveNonStrikerID, req.ActiveBowlerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "active players updated successfully"})
 }

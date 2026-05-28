@@ -104,6 +104,20 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 		return "", "", fmt.Errorf("failed to create innings: %w", err)
 	}
 
+
+	if req.StrikerID != "" {
+		_, _ = tx.Exec(`
+			INSERT INTO player_match_stats (match_id, player_id) 
+			VALUES ($1, $2) 
+			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, req.StrikerID)
+	}
+	if req.NonStrikerID != "" {
+		_, _ = tx.Exec(`
+			INSERT INTO player_match_stats (match_id, player_id) 
+			VALUES ($1, $2) 
+			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, req.NonStrikerID)
+	}
+
 	if err = tx.Commit(); err != nil {
 		return "", "", err
 	}
@@ -111,7 +125,7 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 	return matchID, inningsID, nil
 }
 
-// AddMatchPlayersTx inserts the selected squad players for both teams into the match_players table within a transaction
+
 func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerIDs []string, team2ID string, team2PlayerIDs []string) error {
 	type playerSlot struct {
 		teamID   string
@@ -151,3 +165,40 @@ func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerI
 
 	return nil
 }
+
+
+func FetchAllMatches() ([]models.MatchListItem, error) {
+	var matches []models.MatchListItem
+	query := `
+		SELECT 
+			m.id, 
+			t1.team_name as team1_name, 
+			t2.team_name as team2_name,
+			m.team1_id,
+			m.team2_id,
+			m.status, 
+			m.total_overs, 
+			TO_CHAR(m.match_date, 'Mon DD, YYYY') as match_date,
+			m.toss_winner_team_id, 
+			m.toss_decision,
+			m.winner_team_id,
+			i1.total_runs as innings1_runs,
+			i1.total_wickets as innings1_wickets,
+			i1.total_overs as innings1_overs,
+			i2.total_runs as innings2_runs,
+			i2.total_wickets as innings2_wickets,
+			i2.total_overs as innings2_overs
+		FROM matches m
+		JOIN teams t1 ON m.team1_id = t1.id
+		JOIN teams t2 ON m.team2_id = t2.id
+		LEFT JOIN innings i1 ON m.id = i1.match_id AND i1.innings_number = 1
+		LEFT JOIN innings i2 ON m.id = i2.match_id AND i2.innings_number = 2
+		ORDER BY m.created_at DESC
+	`
+	err := db.KhiladiDb.Select(&matches, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch all matches: %w", err)
+	}
+	return matches, nil
+}
+
