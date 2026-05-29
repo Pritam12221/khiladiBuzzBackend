@@ -18,7 +18,7 @@ func GetProfile(c *gin.Context) {
 
 	player, err := dbhelper.GetPlayerByUserID(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed fetch player profile"})
 		return
 	}
 
@@ -40,7 +40,7 @@ func UpdateProfile(c *gin.Context) {
 
 	err := dbhelper.UpdatePlayerProfile(userID, req.PlayerName, req.PhoneNumber, req.Role, req.BattingStyle, req.BowlingStyle)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update player profile"})
 		return
 	}
 
@@ -63,7 +63,7 @@ func SearchPlayers(c *gin.Context) {
 
 	players, err := dbhelper.SearchPlayers(q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search players"})
 		return
 	}
 

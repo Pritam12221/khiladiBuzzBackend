@@ -17,7 +17,7 @@ func GetMatchScorecard(c *gin.Context) {
 
 	scorecard, err := dbhelper.FetchMatchScorecard(matchID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed fetch scorecard"})
 		return
 	}
 

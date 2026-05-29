@@ -17,7 +17,7 @@ func GetInningsPlayers(c *gin.Context) {
 
 	battingPlayers, bowlingPlayers, battingTeamName, bowlingTeamName, battingTeamID, bowlingTeamID, matchID, inningsNumber, matchStatus, err := dbhelper.FetchInningsPlayers(inningsID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch innings players"})
 		return
 	}
 
@@ -45,13 +45,13 @@ func CreateInnings(c *gin.Context) {
 
 	var req models.CreateInningsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to create innings"})
 		return
 	}
 
 	inningsID, err := dbhelper.CreateInnings(matchID, req.InningsNumber, req.BattingTeamID, req.BowlingTeamID, req.Status, req.StrikerID, req.NonStrikerID, req.BowlerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid request payload"})
 		return
 	}
 
@@ -70,13 +70,13 @@ func UpdateActivePlayers(c *gin.Context) {
 
 	var req models.UpdateActivePlayersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "innings id is required"})
 		return
 	}
 
 	err := dbhelper.UpdateActivePlayers(inningsID, req.ActiveStrikerID, req.ActiveNonStrikerID, req.ActiveBowlerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update active players"})
 		return
 	}
 

@@ -50,7 +50,7 @@ func RecordBall(c *gin.Context) {
 
 	var req models.RecordBallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error":  "invalid ball request"})
 		return
 	}
 
@@ -73,7 +73,7 @@ func RecordBall(c *gin.Context) {
 
 	stats, err := dbhelper.RecordBall(inningsID, matchID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record ball"})
 		return
 	}
 
@@ -83,11 +83,11 @@ func RecordBall(c *gin.Context) {
 	})
 }
 
-// FetchAllMatches returns all matches in the database for the spectator dashboard.
+// FetchAllMatches for live scorecard
 func FetchAllMatches(c *gin.Context) {
 	matches, err := dbhelper.FetchAllMatches()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch matches"})
 		return
 	}
 	c.JSON(http.StatusOK, matches)

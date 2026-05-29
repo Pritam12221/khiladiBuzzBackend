@@ -43,6 +43,21 @@ type ExtrasSummary struct {
 	Total   int `json:"total" db:"total"`
 }
 
+type SquadPlayer struct {
+	ID           string `json:"id" db:"player_id"`
+	Name         string `json:"name" db:"player_name"`
+	Role         *string `json:"role" db:"role"`
+	BattingStyle *string `json:"battingStyle" db:"batting_style"`
+	BowlingStyle *string `json:"bowlingStyle" db:"bowling_style"`
+	IsCaptain    bool   `json:"isCaptain" db:"is_captain"`
+}
+
+type PlayingSquad struct {
+	TeamName  string        `json:"teamName"`
+	TeamShort string        `json:"teamShort"`
+	Players   []SquadPlayer `json:"players"`
+}
+
 type InningsData struct {
 	TeamName      string       `json:"teamName"`
 	TeamShort     string       `json:"teamShort"`
@@ -79,6 +94,8 @@ type MatchDetail struct {
 		TeamShort string `json:"teamShort"`
 		Stats     string `json:"stats"`
 	} `json:"playerOfTheMatch,omitempty"`
+	Squad1   *PlayingSquad `json:"squad1,omitempty"`
+	Squad2   *PlayingSquad `json:"squad2,omitempty"`
 	Innings1 InningsData  `json:"innings1"`
 	Innings2 *InningsData `json:"innings2,omitempty"`
 }

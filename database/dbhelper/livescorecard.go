@@ -32,7 +32,7 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 			TeamShort:     teamShort,
 			Runs:          inn.TotalRuns,
 			Wickets:       inn.TotalWickets,
-			Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
+			Overs:         fmt.Sprintf("%.1f", inn.	TotalOvers),
 			Batting:       []models.BatsmanRow{},
 			Bowling:       []models.BowlerRow{},
 			YetToBat:      []string{},
@@ -89,7 +89,44 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 		}
 	}
 
+	// Fetch Squads
+	squad1, _ := FetchMatchSquad(matchID, match.TeamAID, match.TeamA, scorecard.TeamAShort)
+	if squad1 != nil {
+		scorecard.Squad1 = squad1
+	}
+	squad2, _ := FetchMatchSquad(matchID, match.TeamBID, match.TeamB, scorecard.TeamBShort)
+	if squad2 != nil {
+		scorecard.Squad2 = squad2
+	}
+
 	return scorecard, nil
+}
+
+func FetchMatchSquad(matchID, teamID, teamName, teamShort string) (*models.PlayingSquad, error) {
+	var players []models.SquadPlayer
+	query := `
+		SELECT 
+			p.id as player_id,
+			u.name as player_name,
+			p.role,
+			p.batting_style,
+			p.bowling_style,
+			COALESCE(mp.is_captain, FALSE) as is_captain
+		FROM match_players mp
+		JOIN player_stats p ON mp.player_id = p.id
+		JOIN users u ON p.user_id = u.id
+		WHERE mp.match_id = $1 AND mp.team_id = $2
+	`
+	err := db.KhiladiDb.Select(&players, query, matchID, teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.PlayingSquad{
+		TeamName:  teamName,
+		TeamShort: teamShort,
+		Players:   players,
+	}, nil
 }
 
 

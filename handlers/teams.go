@@ -15,7 +15,7 @@ func CreateTeam(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+			"error": "invali request",
 		})
 		return
 	}
@@ -29,7 +29,7 @@ func CreateTeam(c *gin.Context) {
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "failed to create team",
 		})
 		return
 	}
@@ -42,14 +42,10 @@ func CreateTeam(c *gin.Context) {
 
 func FetchTeams(c *gin.Context) {
 	userID := c.GetString("user")
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
 
 	teams, err := dbhelper.FetchTeams(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fecth teams"})
 		return
 	}
 
@@ -66,7 +62,7 @@ func GetTeamPlayers(c *gin.Context) {
 	players, err := dbhelper.FetchTeamPlayers(teamID)
 	fmt.Print(players)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error while fetching team players"})
 		return
 	}
 
@@ -82,13 +78,13 @@ func AddPlayerToTeam(c *gin.Context) {
 
 	var req models.CreatePlayerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player request"})
 		return
 	}
 
 	player, err := dbhelper.FindOrCreatePlayerForTeam(req.PlayerName, req.PhoneNumber, req.Role, teamID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add player to team"})
 		return
 	}
 

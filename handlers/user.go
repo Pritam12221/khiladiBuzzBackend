@@ -50,7 +50,7 @@ func RegisterUser(c *gin.Context) {
 	var req models.UserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid registration request"})
 		return
 	}
 
@@ -64,14 +64,14 @@ func RegisterUser(c *gin.Context) {
 	// Hash password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process password"})
 		return
 	}
 
 	// Create user
 	user, err := dbhelper.CreateUser(req.Name, req.PhoneNumber, hashedPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
 
@@ -102,13 +102,13 @@ func LogOutUser(c* gin.Context){
 		sessionId:=c.GetString("session_id");
 
 		if sessionId== ""{
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Logout failed"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invlid session"})
 		}
 
 		err := dbhelper.DeleteUserSession(sessionId)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout user"})
 		return
 	}
 
@@ -118,7 +118,7 @@ func LogOutUser(c* gin.Context){
 func SendOTP(c *gin.Context) {
 	var req models.SendOtpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid otp request"})
 		return
 	}
 
