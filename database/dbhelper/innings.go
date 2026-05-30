@@ -268,12 +268,12 @@ const insertInningsQuery = `
 `
 
 // CreateInningsTx creates an innings record using the provided transaction
-func CreateInningsTx(tx *sqlx.Tx, matchID string, inningsNumber int, battingTeamID, bowlingTeamID string, status string) (string, error) {
+func CreateInningsTx(tx *sqlx.Tx, matchID string, inningsNumber int, battingTeamID, bowlingTeamID string, status,strikerID,nonStrikerID,bowlerID string) (string, error) {
 	var inningsID string
 	err := tx.Get(&inningsID, `
-		INSERT INTO innings (match_id, innings_number, batting_team_id, bowling_team_id, status)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id`, matchID, inningsNumber, battingTeamID, bowlingTeamID, status)
+		INSERT INTO innings (match_id, innings_number, batting_team_id, bowling_team_id, status,active_striker_id,active_non_striker_id,active_bowler_id)
+		VALUES ($1, $2, $3, $4, $5,$6,$7,$8)
+		RETURNING id`, matchID, inningsNumber, battingTeamID, bowlingTeamID, status,strikerID,nonStrikerID,bowlerID)
 	return inningsID, err
 }
 

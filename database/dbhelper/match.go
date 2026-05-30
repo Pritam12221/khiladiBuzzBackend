@@ -99,7 +99,7 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 	}
 
 	// create innings using extracted helper
-	inningsID, err := CreateInningsTx(tx, matchID, 1, battingTeamID, bowlingTeamID, "live")
+	inningsID, err := CreateInningsTx(tx, matchID, 1, battingTeamID, bowlingTeamID, "live", req.StrikerID, req.NonStrikerID, req.BowlerID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create innings: %w", err)
 	}
