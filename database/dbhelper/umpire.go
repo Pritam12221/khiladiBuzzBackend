@@ -33,6 +33,75 @@ func InsertBallTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest) e
 	return err
 }
 
+
+func resolveNextActivePlayers(
+	tx *sqlx.Tx,
+	inningsID string,
+	req models.RecordBallRequest,
+) (strikerArg, nonStrikerArg, bowlerArg *string) {
+
+	//current active plyers (for every bowl)
+	var nextStrikerID *string = &req.StrikerID
+	var nextNonStrikerID *string = req.NonStrikerID
+	var nextBowlerID *string = &req.BowlerID
+
+	// check if player is out or not
+	if req.IsWicket && req.DismissedPlayerID != nil {
+		if *req.DismissedPlayerID == req.StrikerID {
+			nextStrikerID = nil
+		} else if req.NonStrikerID != nil && *req.DismissedPlayerID == *req.NonStrikerID {
+			nextNonStrikerID = nil
+		}
+	}
+
+	// Strike rotation on odd runs
+	runsRun := req.RunsScored
+	if req.ExtraType != nil && (*req.ExtraType == "bye" || *req.ExtraType == "leg_bye" || *req.ExtraType == "wide") {
+		runsRun = req.ExtrasRuns
+	}
+	if runsRun%2 != 0 && nextStrikerID != nil && nextNonStrikerID != nil {
+		nextStrikerID, nextNonStrikerID = nextNonStrikerID, nextStrikerID
+	}
+
+	// check over based on legl bowls  (6)
+	var validBalls int
+	if err := tx.Get(&validBalls, `
+		SELECT COUNT(*) FROM balls
+		WHERE innings_id = $1
+		  AND over_number = $2
+		  AND (extra_type IS NULL OR (extra_type != 'wide' AND extra_type != 'no_ball'))
+	`, inningsID, req.OverNumber); err == nil && validBalls >= 6 {
+		// Batsmen change ends at the start of the next over
+		if nextStrikerID != nil && nextNonStrikerID != nil {
+			nextStrikerID, nextNonStrikerID = nextNonStrikerID, nextStrikerID
+		}
+		nextBowlerID = nil 
+	}
+
+	if nextStrikerID != nil && *nextStrikerID != "" {
+		strikerArg = nextStrikerID
+	}
+	if nextNonStrikerID != nil && *nextNonStrikerID != "" {
+		nonStrikerArg = nextNonStrikerID
+	}
+	if nextBowlerID != nil && *nextBowlerID != "" {
+		bowlerArg = nextBowlerID
+	}
+	return
+}
+
+
+func fetchNextPlayerStats(tx *sqlx.Tx, matchID string, playerArg *string) *models.PlayerStatsSummary {
+	if playerArg == nil || *playerArg == "" {
+		return nil
+	}
+	stats, err := FetchPlayerMatchStatsSummaryTx(tx, matchID, *playerArg)
+	if err != nil {
+		return nil
+	}
+	return stats
+}
+
 //record ball by ball
 func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) (*models.RecordBallResponseDetails, error) {
 	tx, err := db.KhiladiDb.Beginx()
@@ -72,7 +141,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		}
 	}
 
-	// Check if the previous ball was a no-ball (Free Hit)
+	// Check if the previous ball was a no-ball 
 	var prevExtraType *string
 	err = tx.Get(&prevExtraType, `
 		SELECT extra_type FROM balls 
@@ -133,27 +202,6 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to fetch current innings: %w", err)
 	}
 
-	// Update active players in the innings table in real-time
-	var strikerVal *string = &req.StrikerID
-	var nonStrikerVal *string
-	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
-		nonStrikerVal = req.NonStrikerID
-	}
-
-	if req.IsWicket && req.DismissedPlayerID != nil {
-		if *req.DismissedPlayerID == req.StrikerID {
-			strikerVal = nil
-		} else if nonStrikerVal != nil && *req.DismissedPlayerID == *nonStrikerVal {
-			nonStrikerVal = nil
-		}
-	}
-
-	_, _ = tx.Exec(`
-		UPDATE innings 
-		SET active_striker_id = $1, 
-		    active_non_striker_id = $2, 
-		    active_bowler_id = $3 
-		WHERE id = $4`, strikerVal, nonStrikerVal, req.BowlerID, inningsID)
 
 
 	// Update non-striker stats if active
@@ -195,12 +243,12 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		}
 
 		isOversFinished := totalBalls >= totalOversLimit*6
-		isAllOut := currentInnings.TotalWickets == 11 || currentInnings.TotalWickets == teamSize
+		isAllOut := currentInnings.TotalWickets == 11 || currentInnings.TotalWickets >= teamSize
 
 		// Innings 1 Completion Check
 		if currentInnings.InningsNumber == 1 {
 			if isOversFinished || isAllOut {
-				// 1. Finalize surviving batsmen for Innings 1 (while active_striker_id/active_non_striker_id are still set)
+				// Finalize surviving batsmen for Innings 1 (while active_striker_id/active_non_striker_id are still set)
 				_, _ = tx.Exec(`
 					UPDATE player_match_stats 
 					SET is_not_out = TRUE 
@@ -216,7 +264,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 						SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
 					)`, matchID, currentInnings.BattingTeamID, inningsID)
 
-				// 2. Clear active players in innings table and mark as completed
+				// Clear active players in innings table and mark as completed
 				_, _ = tx.Exec(`
 					UPDATE innings 
 					SET status = 'completed', 
@@ -263,6 +311,19 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 						WHERE id = $1`, inningsID)
 					_, err = tx.Exec(
 						`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, currentInnings.BattingTeamID, matchID)
+
+					if err == nil {
+						_, _ = tx.Exec(`
+							UPDATE player_stats SET
+								career_matches = career_matches + 1,
+								career_wins = career_wins + CASE WHEN id IN (
+									SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+								) THEN 1 ELSE 0 END,
+								updated_at = NOW()
+							WHERE id IN (
+								SELECT player_id FROM match_players WHERE match_id = $1
+							)`, matchID, currentInnings.BattingTeamID)
+					}
 				} else if isOversFinished || isAllOut {
 					_, _ = tx.Exec(`
 						UPDATE player_match_stats 
@@ -293,24 +354,52 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 						winnerTeamID = &currentInnings.BowlingTeamID
 					}
 					_, err = tx.Exec(`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, winnerTeamID, matchID)
+					if err == nil {
+						_, _ = tx.Exec(`
+							UPDATE player_stats SET
+								career_matches = career_matches + 1,
+								career_wins = career_wins + CASE WHEN $2::uuid IS NOT NULL AND id IN (
+									SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2::uuid
+								) THEN 1 ELSE 0 END,
+								updated_at = NOW()
+							WHERE id IN (
+								SELECT player_id FROM match_players WHERE match_id = $1
+							)`, matchID, winnerTeamID)
+					}
 				}
 			}
 		}
 	}
 
-	// Fetch latest statistics for the response payload
-	var result models.RecordBallResponseDetails
+	// Determine next active players and persist them (only if the innings is not completed yet)
+	var strikerArg, nonStrikerArg, bowlerArg *string
 
-	if strikerStats, err := FetchPlayerMatchStatsSummaryTx(tx, matchID, req.StrikerID); err == nil {
-		result.Striker = strikerStats
+	var isCompletedNow bool
+	err = tx.Get(&isCompletedNow, `SELECT EXISTS(SELECT 1 FROM innings WHERE id = $1 AND status = 'completed')`, inningsID)
+	if err == nil && !isCompletedNow {
+		strikerArg, nonStrikerArg, bowlerArg = resolveNextActivePlayers(tx, inningsID, req)
 	}
-	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
-		if nonStrikerStats, err := FetchPlayerMatchStatsSummaryTx(tx, matchID, *req.NonStrikerID); err == nil {
-			result.NonStriker = nonStrikerStats
-		}
+
+	_, err = tx.Exec(`
+		UPDATE innings
+		SET active_striker_id    = $1::uuid,
+		    active_non_striker_id = $2::uuid,
+		    active_bowler_id      = $3::uuid
+		WHERE id = $4`,
+		strikerArg, nonStrikerArg, bowlerArg, inningsID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update next active players: %w", err)
 	}
-	if bowlerStats, err := FetchPlayerMatchStatsSummaryTx(tx, matchID, req.BowlerID); err == nil {
-		result.Bowler = bowlerStats
+
+	
+	result := models.RecordBallResponseDetails{
+		Striker:          fetchNextPlayerStats(tx, matchID, strikerArg),
+		NonStriker:       fetchNextPlayerStats(tx, matchID, nonStrikerArg),
+		Bowler:           fetchNextPlayerStats(tx, matchID, bowlerArg),
+		NextStrikerID:    strikerArg,
+		NextNonStrikerID: nonStrikerArg,
+		NextBowlerID:     bowlerArg,
 	}
 
 	if err = tx.Commit(); err != nil {

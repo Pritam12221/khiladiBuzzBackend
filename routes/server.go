@@ -30,6 +30,13 @@ func ServerRoutes() *gin.Engine {
 		userRoutes.POST("/forgot-password", handlers.ForgotPassword)
 	}
 
+	// Public routes 
+	publicRoutes := r.Group("/v1")
+	{
+		publicRoutes.GET("/matches", handlers.FetchAllMatches)
+		publicRoutes.GET("/matches/:id/scorecard", handlers.GetMatchScorecard)
+	}
+
 	authRoutes:=r.Group("/v1")
 	authRoutes.Use(middleware.AuthMiddleware())
 	{
@@ -51,17 +58,15 @@ func ServerRoutes() *gin.Engine {
 		matches := authRoutes.Group("/matches")
 		{
 			matches.POST("", handlers.CreateMatch)
-			matches.GET("", handlers.FetchAllMatches)
-			matches.GET("/:id/scorecard", handlers.GetMatchScorecard)
 			matches.POST("/:id/innings", handlers.CreateInnings)
 			matches.POST("/:id/innings/:innings_id/ball", handlers.RecordBall)
-			matches.PUT("/:id/innings/:innings_id/active-players", handlers.UpdateActivePlayers)
 		}
 
 		// Innings 
 		innings := authRoutes.Group("/innings")
 		{
 			innings.GET("/:id/players", handlers.GetInningsPlayers)
+			innings.PUT("/:id/active-players", handlers.UpdateActivePlayers)
 		}
 
 		// Players 

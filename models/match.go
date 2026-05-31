@@ -46,9 +46,12 @@ type PlayerStatsSummary struct {
 }
 
 type RecordBallResponseDetails struct {
-	Striker    *PlayerStatsSummary `json:"striker,omitempty"`
-	NonStriker *PlayerStatsSummary `json:"non_striker,omitempty"`
-	Bowler     *PlayerStatsSummary `json:"bowler,omitempty"`
+	Striker          *PlayerStatsSummary `json:"striker,omitempty"`
+	NonStriker       *PlayerStatsSummary `json:"non_striker,omitempty"`
+	Bowler           *PlayerStatsSummary `json:"bowler,omitempty"`
+	NextStrikerID    *string             `json:"next_striker_id,omitempty"`
+	NextNonStrikerID *string             `json:"next_non_striker_id,omitempty"`
+	NextBowlerID     *string             `json:"next_bowler_id,omitempty"`
 }
 
 type CreateInningsRequest struct {

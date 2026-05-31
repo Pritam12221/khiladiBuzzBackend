@@ -73,7 +73,7 @@ func RecordBall(c *gin.Context) {
 
 	stats, err := dbhelper.RecordBall(inningsID, matchID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record ball"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record  ball"})
 		return
 	}
 

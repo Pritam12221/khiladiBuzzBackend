@@ -53,10 +53,26 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	inn.ActiveNonStrikerID,)
 
 		//Populate bowlers stats 
-		bowlStats, _ := FetchBowlingStats(matchID, inn.BowlingTeamID)
 		activeBowlerID := ""
 		if inn.ActiveBowlerID != nil {
 			activeBowlerID = *inn.ActiveBowlerID
+		}
+		bowlStats, _ := FetchBowlingStats(matchID, inn.BowlingTeamID)
+		
+		if activeBowlerID != "" && inn.ActiveBowlerName != nil {
+			found := false
+			for _, bs := range bowlStats {
+				if bs.PlayerID == activeBowlerID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				bowlStats = append(bowlStats, models.BowlStat{
+					PlayerID: activeBowlerID,
+					Name:     *inn.ActiveBowlerName,
+				})
+			}
 		}
 		innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, seenBowlers, activeBowlerID)
 
@@ -185,15 +201,22 @@ type inningsRow struct {
 	ActiveStrikerID    *string `db:"active_striker_id"`
 	ActiveNonStrikerID *string `db:"active_non_striker_id"`
 	ActiveBowlerID     *string `db:"active_bowler_id"`
+	ActiveBowlerName   *string `db:"active_bowler_name"`
 }
 
 func fetchMatchInningsRows(matchID string) ([]inningsRow, error) {
 	var innings []inningsRow
 	query := `
-		SELECT id, innings_number, batting_team_id, bowling_team_id, total_runs, total_wickets, total_overs, active_striker_id, active_non_striker_id, active_bowler_id 
-		FROM innings 
-		WHERE match_id = $1 
-		ORDER BY innings_number ASC`
+		SELECT 
+			i.id, i.innings_number, i.batting_team_id, i.bowling_team_id,
+			i.total_runs, i.total_wickets, i.total_overs,
+			i.active_striker_id, i.active_non_striker_id, i.active_bowler_id,
+			ub.name as active_bowler_name
+		FROM innings i
+		LEFT JOIN player_stats pb ON i.active_bowler_id = pb.id
+		LEFT JOIN users ub ON pb.user_id = ub.id
+		WHERE i.match_id = $1
+		ORDER BY i.innings_number ASC`
 	err := db.KhiladiDb.Select(&innings, query, matchID)
 	return innings, err
 }
