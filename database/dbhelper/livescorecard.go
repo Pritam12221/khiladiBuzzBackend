@@ -7,6 +7,87 @@ import (
 	"math"
 )
 
+// populateInningsData fetches, aggregates, and formats all batting, bowling, and extras data for a single
+func populateInningsData(match *matchRow, inn inningsRow) (models.InningsData, error) {
+
+		teamName := match.TeamA
+	if inn.BattingTeamID == match.TeamBID {
+		teamName = match.TeamB
+	}
+
+	innData := models.InningsData{
+		TeamName:      teamName,
+		Runs:          inn.TotalRuns,
+		Wickets:       inn.TotalWickets,
+		Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
+		Batting:       []models.BatsmanRow{},
+		Bowling:       []models.BowlerRow{},
+		YetToBat:      []string{},
+		FallOfWickets: []string{}, 
+		TopBatsmen:    []models.TopBatsman{},
+		TopBowlers:    []models.TopBowler{},
+		Extras:        models.ExtrasSummary{},
+	}
+
+	// track order of player which they are batting
+	balls, _ := FetchInningsBalls(inn.ID)
+	orderedBatsmenIDs, seenBatsmen := getOrderedBatsmen(balls, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
+	orderedBowlersIDs, seenBowlers := getOrderedBowlers(balls, inn.ActiveBowlerID)
+
+	// Populate Batting stats
+	batStats, err := FetchBattingStats(match.ID, inn.ID, inn.BattingTeamID)
+	if err != nil {
+		fmt.Printf("livescorecard: FetchBattingStats error: %v\n", err)
+		return models.InningsData{}, err
+	}
+	innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, seenBatsmen, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
+
+	// Populate bowlers stats 
+	activeBowlerID := ""
+	if inn.ActiveBowlerID != nil {
+		activeBowlerID = *inn.ActiveBowlerID
+	}
+	bowlStats, err := FetchBowlingStats(match.ID, inn.ID, inn.BowlingTeamID)
+	if err != nil {
+		fmt.Printf("livescorecard: FetchBowlingStats error: %v\n", err)
+		return models.InningsData{}, err
+	}
+	
+	if activeBowlerID != "" && inn.ActiveBowlerName != nil {
+		found := false
+		for _, bs := range bowlStats {
+			if bs.PlayerID == activeBowlerID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			bowlStats = append(bowlStats, models.BowlStat{
+				PlayerID: activeBowlerID,
+				Name:     *inn.ActiveBowlerName,
+			})
+		}
+	}
+	innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, seenBowlers, activeBowlerID)
+
+	// fetch total innings
+	innData.Extras, _ = FetchInningsExtras(inn.ID)
+
+	// Populate Yet to Bat Players
+	innData.YetToBat, _ = FetchYetToBat(match.ID, inn.BattingTeamID, seenBatsmen)
+
+	// summary table 
+	if match.Status == "completed" {
+		innData.TopBatsmen, _ = FetchTopBatsmenSummary(match.ID, inn.BattingTeamID)
+		innData.TopBowlers, _ = FetchTopBowlersSummary(match.ID, inn.BowlingTeamID)
+	}
+
+	// to handle solo player
+	normalizeInningsData(&innData)
+
+	return innData, nil
+}
+
 // FetchMatchScorecard fetches all aggregated innings and match statistics for a public scorecard.
 func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 
@@ -25,14 +106,16 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	}
 
 	for _, inn := range innings {
-		teamName, teamShort := getInningsTeamNames(match, inn.BattingTeamID)
+		teamName := match.TeamA
+		if inn.BattingTeamID == match.TeamBID {
+			teamName = match.TeamB
+		}
 
 		innData := models.InningsData{
 			TeamName:      teamName,
-			TeamShort:     teamShort,
 			Runs:          inn.TotalRuns,
 			Wickets:       inn.TotalWickets,
-			Overs:         fmt.Sprintf("%.1f", inn.	TotalOvers),
+			Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
 			Batting:       []models.BatsmanRow{},
 			Bowling:       []models.BowlerRow{},
 			YetToBat:      []string{},
@@ -42,22 +125,29 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 			Extras:        models.ExtrasSummary{},
 		}
 
-		// track order of player which they are abtting
+		// track order of player which they are batting
 		balls, _ := FetchInningsBalls(inn.ID)
 		orderedBatsmenIDs, seenBatsmen := getOrderedBatsmen(balls, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
 		orderedBowlersIDs, seenBowlers := getOrderedBowlers(balls, inn.ActiveBowlerID)
 
 		// Populate Batting stats
-		batStats, _ := FetchBattingStats(matchID, inn.BattingTeamID)
-		innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, seenBatsmen,inn.ActiveStrikerID,
-	inn.ActiveNonStrikerID,)
+		batStats, err := FetchBattingStats(matchID, inn.ID, inn.BattingTeamID)
+		if err != nil {
+			fmt.Printf("livescorecard: FetchBattingStats error: %v\n", err)
+			return nil, err
+		}
+		innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, seenBatsmen, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
 
-		//Populate bowlers stats 
+		// Populate bowlers stats 
 		activeBowlerID := ""
 		if inn.ActiveBowlerID != nil {
 			activeBowlerID = *inn.ActiveBowlerID
 		}
-		bowlStats, _ := FetchBowlingStats(matchID, inn.BowlingTeamID)
+		bowlStats, err := FetchBowlingStats(matchID, inn.ID, inn.BowlingTeamID)
+		if err != nil {
+			fmt.Printf("livescorecard: FetchBowlingStats error: %v\n", err)
+			return nil, err
+		}
 		
 		if activeBowlerID != "" && inn.ActiveBowlerName != nil {
 			found := false
@@ -79,10 +169,10 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 		// fetch total innings
 		innData.Extras, _ = FetchInningsExtras(inn.ID)
 
-		//Populate Yet to Bat Players
+		// Populate Yet to Bat Players
 		innData.YetToBat, _ = FetchYetToBat(matchID, inn.BattingTeamID, seenBatsmen)
 
-		//summary table 
+		// summary table 
 		if match.Status == "completed" {
 			innData.TopBatsmen, _ = FetchTopBatsmenSummary(matchID, inn.BattingTeamID)
 			innData.TopBowlers, _ = FetchTopBowlersSummary(matchID, inn.BowlingTeamID)
@@ -106,11 +196,11 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	}
 
 	// Fetch Squads
-	squad1, _ := FetchMatchSquad(matchID, match.TeamAID, match.TeamA, scorecard.TeamAShort)
+	squad1, _ := FetchMatchSquad(matchID, match.TeamAID, match.TeamA)
 	if squad1 != nil {
 		scorecard.Squad1 = squad1
 	}
-	squad2, _ := FetchMatchSquad(matchID, match.TeamBID, match.TeamB, scorecard.TeamBShort)
+	squad2, _ := FetchMatchSquad(matchID, match.TeamBID, match.TeamB)
 	if squad2 != nil {
 		scorecard.Squad2 = squad2
 	}
@@ -118,20 +208,15 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	return scorecard, nil
 }
 
-func FetchMatchSquad(matchID, teamID, teamName, teamShort string) (*models.PlayingSquad, error) {
+func FetchMatchSquad(matchID, teamID, teamName string) (*models.PlayingSquad, error) {
 	var players []models.SquadPlayer
 	query := `
-		SELECT 
-			p.id as player_id,
-			u.name as player_name,
-			p.role,
-			p.batting_style,
-			p.bowling_style,
-			COALESCE(mp.is_captain, FALSE) as is_captain
-		FROM match_players mp
-		JOIN player_stats p ON mp.player_id = p.id
+		SELECT DISTINCT p.id as player_id, u.name as player_name, p.role, p.batting_style, p.bowling_style, COALESCE(mp.is_captain, FALSE) as is_captain
+		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		WHERE mp.match_id = $1 AND mp.team_id = $2
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
+		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))
 	`
 	err := db.KhiladiDb.Select(&players, query, matchID, teamID)
 	if err != nil {
@@ -140,7 +225,6 @@ func FetchMatchSquad(matchID, teamID, teamName, teamShort string) (*models.Playi
 
 	return &models.PlayingSquad{
 		TeamName:  teamName,
-		TeamShort: teamShort,
 		Players:   players,
 	}, nil
 }
@@ -234,49 +318,60 @@ func FetchInningsBalls(inningsID string) ([]models.BallRow, error) {
 }
 
 // FetchBattingStats fetches raw batting match stats for all squad players
-func FetchBattingStats(matchID, battingTeamID string) ([]models.BatStat, error) {
+func FetchBattingStats(matchID, inningsID, battingTeamID string) ([]models.BatStat, error) {
 	var batStats []models.BatStat
 	query := `
 		SELECT 
 			p.id as player_id,
-			u.name as player_name, 
-			pms.runs_scored, 
-			pms.balls_faced, 
-			pms.fours, 
-			pms.sixes, 
-			COALESCE(pms.is_not_out, FALSE) as is_not_out,
-			pms.dismissal_type,
-			bu.name as bowler_name,
-			fu.name as fielder_name
-		FROM player_match_stats pms
-		JOIN player_stats p ON pms.player_id = p.id
+			u.name as player_name,
+			COALESCE((SELECT SUM(runs_scored) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide')), 0) as runs_scored,
+			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide')), 0) as balls_faced,
+			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide') AND runs_scored = 4), 0) as fours,
+			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide') AND runs_scored = 6), 0) as sixes,
+			CASE WHEN EXISTS(SELECT 1 FROM balls WHERE innings_id = $1 AND dismissed_player_id = p.id) THEN FALSE ELSE TRUE END as is_not_out,
+			(SELECT dismissal_type FROM balls WHERE innings_id = $1 AND dismissed_player_id = p.id LIMIT 1) as dismissal_type,
+			(SELECT u_bowl.name FROM balls b JOIN player_stats pb ON b.bowler_id = pb.id JOIN users u_bowl ON pb.user_id = u_bowl.id WHERE b.innings_id = $1 AND b.dismissed_player_id = p.id LIMIT 1) as bowler_name,
+			NULL::text as fielder_name
+		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = pms.match_id
-		LEFT JOIN player_stats bp ON pms.dismissed_by = bp.id
-		LEFT JOIN users bu ON bp.user_id = bu.id
-		LEFT JOIN player_stats fp ON pms.fielder_id = fp.id
-		LEFT JOIN users fu ON fp.user_id = fu.id
-		WHERE pms.match_id = $1 AND mp.team_id = $2`
-	err := db.KhiladiDb.Select(&batStats, query, matchID, battingTeamID)
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $2 AND mp.team_id = $3
+		WHERE (mp.match_id = $2 AND mp.team_id = $3)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $2))`
+	err := db.KhiladiDb.Select(&batStats, query, inningsID, matchID, battingTeamID)
 	return batStats, err
 }
 
 // FetchBowlingStats fetches raw bowling match stats for all squad players
-func FetchBowlingStats(matchID, bowlingTeamID string) ([]models.BowlStat, error) {
+func FetchBowlingStats(matchID, inningsID, bowlingTeamID string) ([]models.BowlStat, error) {
 	var bowlStats []models.BowlStat
 	query := `
 		SELECT 
 			p.id as player_id,
-			u.name as player_name, 
-			pms.overs_bowled, 
-			pms.runs_given, 
-			pms.wickets_taken
-		FROM player_match_stats pms
-		JOIN player_stats p ON pms.player_id = p.id
+			u.name as player_name,
+			COALESCE((
+				SELECT (total_balls / 6)::float + (total_balls % 6)::float * 0.1
+				FROM (
+					SELECT COUNT(*) as total_balls 
+					FROM balls 
+					WHERE innings_id = $1 AND bowler_id = p.id AND (extra_type IS NULL OR extra_type::text NOT IN ('wide', 'no_ball'))
+				) tb
+			), 0.0) as overs_bowled,
+			COALESCE((
+				SELECT SUM(runs_scored + extras_runs + CASE WHEN extra_type::text IN ('wide', 'no_ball') THEN 1 ELSE 0 END) 
+				FROM balls 
+				WHERE innings_id = $1 AND bowler_id = p.id AND (extra_type IS NULL OR extra_type::text NOT IN ('bye', 'leg_bye'))
+			), 0) as runs_given,
+			COALESCE((
+				SELECT COUNT(*) 
+				FROM balls 
+				WHERE innings_id = $1 AND bowler_id = p.id AND is_wicket = TRUE AND dismissal_type IS NOT NULL AND dismissal_type::text NOT IN ('runout', 'retired_hurt')
+			), 0) as wickets_taken
+		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = pms.match_id
-		WHERE pms.match_id = $1 AND mp.team_id = $2`
-	err := db.KhiladiDb.Select(&bowlStats, query, matchID, bowlingTeamID)
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $2 AND mp.team_id = $3
+		WHERE (mp.match_id = $2 AND mp.team_id = $3)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $2))`
+	err := db.KhiladiDb.Select(&bowlStats, query, inningsID, matchID, bowlingTeamID)
 	return bowlStats, err
 }
 
@@ -300,11 +395,12 @@ func FetchInningsExtras(inningsID string) (models.ExtrasSummary, error) {
 func FetchYetToBat(matchID, battingTeamID string, seenBatsmen map[string]bool) ([]string, error) {
 	var teamPlayers []models.PlayerNameRow
 	query := `
-		SELECT p.id as player_id, u.name as player_name
-		FROM match_players mp
-		JOIN player_stats p ON mp.player_id = p.id
+		SELECT DISTINCT p.id as player_id, u.name as player_name
+		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		WHERE mp.match_id = $1 AND mp.team_id = $2`
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
+		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))`
 	err := db.KhiladiDb.Select(&teamPlayers, query, matchID, battingTeamID)
 	if err != nil {
 		return nil, err
@@ -499,15 +595,6 @@ func formatBowlingStats(bowlStats []models.BowlStat, orderedBowlersIDs []string,
 }
 
 func assembleMatchDetail(match *matchRow) *models.MatchDetail {
-	shortNameA := match.TeamA
-	if len(shortNameA) > 3 {
-		shortNameA = shortNameA[:3]
-	}
-	shortNameB := match.TeamB
-	if len(shortNameB) > 3 {
-		shortNameB = shortNameB[:3]
-	}
-
 	tossWinnerName := match.TeamA
 	if match.TossWinnerTeamID == match.TeamBID {
 		tossWinnerName = match.TeamB
@@ -552,8 +639,6 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		ID:           match.ID,
 		TeamA:        match.TeamA,
 		TeamB:        match.TeamB,
-		TeamAShort:   shortNameA,
-		TeamBShort:   shortNameB,
 		Status:       match.Status,
 		StatusText:   statusText,
 		ResultText:   resultTextVal,
@@ -564,23 +649,6 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		Umpire:       umpireName,
 		Host:         hostName,
 	}
-}
-
-func getInningsTeamNames(match *matchRow, battingTeamID string) (string, string) {
-	teamName := match.TeamA
-	teamShort := match.TeamA
-	if len(teamShort) > 3 {
-		teamShort = teamShort[:3]
-	}
-
-	if battingTeamID == match.TeamBID {
-		teamName = match.TeamB
-		teamShort = match.TeamB
-		if len(teamShort) > 3 {
-			teamShort = teamShort[:3]
-		}
-	}
-	return teamName, teamShort
 }
 
 func normalizeInningsData(innData *models.InningsData) {

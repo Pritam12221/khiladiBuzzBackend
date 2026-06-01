@@ -89,3 +89,24 @@ type MatchListItem struct {
 	Innings2Wickets  *int     `json:"innings2_wickets" db:"innings2_wickets"`
 	Innings2Overs    *float64 `json:"innings2_overs" db:"innings2_overs"`
 }
+
+type InningsPlayersDetails struct {
+	MatchID            string   `json:"match_id"`
+	InningsNumber      int      `json:"innings_number"`
+	MatchStatus        string   `json:"match_status"`
+	BattingTeamID      string   `json:"batting_team_id"`
+	BowlingTeamID      string   `json:"bowling_team_id"`
+	BattingTeamName    string   `json:"batting_team_name"`
+	BowlingTeamName    string   `json:"bowling_team_name"`
+	BattingPlayers     []Player `json:"batting_players"`
+	BowlingPlayers     []Player `json:"bowling_players"`
+	ActiveStrikerID    *string  `json:"active_striker_id"`
+	ActiveNonStrikerID *string  `json:"active_non_striker_id"`
+	ActiveBowlerID     *string  `json:"active_bowler_id"`
+	TotalRuns          int      `json:"total_runs"`
+	TotalWickets       int      `json:"total_wickets"`
+	TotalOvers         float64  `json:"total_overs"`
+	TotalOversLimit    int      `json:"total_overs_limit"`
+	TossWinnerTeamID   *string  `json:"toss_winner_team_id"`
+	TossDecision       *string  `json:"toss_decision"`
+}

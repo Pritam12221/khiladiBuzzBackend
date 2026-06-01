@@ -216,8 +216,8 @@ func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, matchID string, playerID string
 	return &stats, nil
 }
 
-// FetchInningsPlayers fetches all match players for a given innings and splits them into batting and bowling rosters.
-func FetchInningsPlayers(inningsID string) ([]models.Player, []models.Player, string, string, string, string, string, int, string, *string, *string, *string, int, int, float64, int, *string, *string, error) {
+//splits them into batting and bowling teams inc common
+func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error) {
 	var innings struct {
 		MatchID            string  `db:"match_id"`
 		InningsNumber      int     `db:"innings_number"`
@@ -235,6 +235,7 @@ func FetchInningsPlayers(inningsID string) ([]models.Player, []models.Player, st
 		TotalOversLimit    int     `db:"total_overs_limit"`
 		TossWinnerTeamID   *string `db:"toss_winner_team_id"`
 		TossDecision       *string `db:"toss_decision"`
+		CommonPlayerID     *string `db:"common_player_id"`
 	}
 	err := db.KhiladiDb.Get(&innings, `
 		SELECT 
@@ -253,14 +254,15 @@ func FetchInningsPlayers(inningsID string) ([]models.Player, []models.Player, st
 			i.total_overs,
 			m.total_overs AS total_overs_limit,
 			m.toss_winner_team_id,
-			m.toss_decision
+			m.toss_decision,
+			m.common_player_id
 		FROM innings i
 		JOIN teams t1 ON i.batting_team_id = t1.id
 		JOIN teams t2 ON i.bowling_team_id = t2.id
 		JOIN matches m ON i.match_id = m.id
 		WHERE i.id = $1`, inningsID)
 	if err != nil {
-		return nil, nil, "", "", "", "", "", 0, "", nil, nil, nil, 0, 0, 0.0, 0, nil, nil, fmt.Errorf("failed to fetch innings details: %w", err)
+		return nil, fmt.Errorf("failed to fetch innings details: %w", err)
 	}
 
 	type MatchPlayerRow struct {
@@ -287,21 +289,61 @@ func FetchInningsPlayers(inningsID string) ([]models.Player, []models.Player, st
 	`
 	err = db.KhiladiDb.Select(&rows, query, innings.MatchID)
 	if err != nil {
-		return nil, nil, "", "", "", "", "", 0, "", nil, nil, nil, 0, 0, 0.0, 0, nil, nil, fmt.Errorf("failed to fetch match players: %w", err)
+		return nil, fmt.Errorf("failed to fetch match players: %w", err)
 	}
 
 	battingPlayers := []models.Player{}
 	bowlingPlayers := []models.Player{}
 
+	seenBatting := make(map[string]bool)
+	seenBowling := make(map[string]bool)
+
 	for _, row := range rows {
-		if strings.EqualFold(row.TeamID, innings.BattingTeamID) {
-			battingPlayers = append(battingPlayers, row.Player)
+		isCommon := innings.CommonPlayerID != nil && row.ID == *innings.CommonPlayerID
+		if isCommon {
+			if !seenBatting[row.ID] {
+				battingPlayers = append(battingPlayers, row.Player)
+				seenBatting[row.ID] = true
+			}
+			if !seenBowling[row.ID] {
+				bowlingPlayers = append(bowlingPlayers, row.Player)
+				seenBowling[row.ID] = true
+			}
+		} else if strings.EqualFold(row.TeamID, innings.BattingTeamID) {
+			if !seenBatting[row.ID] {
+				battingPlayers = append(battingPlayers, row.Player)
+				seenBatting[row.ID] = true
+			}
 		} else if strings.EqualFold(row.TeamID, innings.BowlingTeamID) {
-			bowlingPlayers = append(bowlingPlayers, row.Player)
+			if !seenBowling[row.ID] {
+				bowlingPlayers = append(bowlingPlayers, row.Player)
+				seenBowling[row.ID] = true
+			}
 		}
 	}
 
-	return battingPlayers, bowlingPlayers, innings.BattingTeamName, innings.BowlingTeamName, innings.BattingTeamID, innings.BowlingTeamID, innings.MatchID, innings.InningsNumber, innings.MatchStatus, innings.ActiveStrikerID, innings.ActiveNonStrikerID, innings.ActiveBowlerID, innings.TotalRuns, innings.TotalWickets, innings.TotalOvers, innings.TotalOversLimit, innings.TossWinnerTeamID, innings.TossDecision, nil
+	details := &models.InningsPlayersDetails{
+		MatchID:            innings.MatchID,
+		InningsNumber:      innings.InningsNumber,
+		MatchStatus:        innings.MatchStatus,
+		BattingTeamID:      innings.BattingTeamID,
+		BowlingTeamID:      innings.BowlingTeamID,
+		BattingTeamName:    innings.BattingTeamName,
+		BowlingTeamName:    innings.BowlingTeamName,
+		BattingPlayers:     battingPlayers,
+		BowlingPlayers:     bowlingPlayers,
+		ActiveStrikerID:    innings.ActiveStrikerID,
+		ActiveNonStrikerID: innings.ActiveNonStrikerID,
+		ActiveBowlerID:     innings.ActiveBowlerID,
+		TotalRuns:          innings.TotalRuns,
+		TotalWickets:       innings.TotalWickets,
+		TotalOvers:         innings.TotalOvers,
+		TotalOversLimit:    innings.TotalOversLimit,
+		TossWinnerTeamID:   innings.TossWinnerTeamID,
+		TossDecision:       innings.TossDecision,
+	}
+
+	return details, nil
 }
 
 const insertInningsQuery = `

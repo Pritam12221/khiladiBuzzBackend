@@ -16,16 +16,16 @@ func GetInningsPlayers(c *gin.Context) {
 		return
 	}
 
-	battingPlayers, bowlingPlayers, battingTeamName, bowlingTeamName, battingTeamID, bowlingTeamID, matchID, inningsNumber, matchStatus, activeStrikerID, activeNonStrikerID, activeBowlerID, totalRuns, totalWickets, totalOvers, totalOversLimit, tossWinnerTeamID, tossDecision, err := dbhelper.FetchInningsPlayers(inningsID)
+	details, err := dbhelper.FetchInningsPlayers(inningsID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch innings players"})
 		return
 	}
 
 	var targetScore *int
-	if inningsNumber == 2 {
+	if details.InningsNumber == 2 {
 		var firstInningsRuns int
-		err := db.KhiladiDb.Get(&firstInningsRuns, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, matchID)
+		err := db.KhiladiDb.Get(&firstInningsRuns, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, details.MatchID)
 		if err == nil {
 			target := firstInningsRuns + 1
 			targetScore = &target
@@ -33,24 +33,24 @@ func GetInningsPlayers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"match_id":              matchID,
-		"innings_number":        inningsNumber,
-		"match_status":          matchStatus,
-		"batting_team_id":       battingTeamID,
-		"bowling_team_id":       bowlingTeamID,
-		"batting_team_name":     battingTeamName,
-		"bowling_team_name":     bowlingTeamName,
-		"batting_players":       battingPlayers,
-		"bowling_players":       bowlingPlayers,
-		"active_striker_id":     activeStrikerID,
-		"active_non_striker_id": activeNonStrikerID,
-		"active_bowler_id":      activeBowlerID,
-		"total_runs":            totalRuns,
-		"total_wickets":         totalWickets,
-		"total_overs":           totalOvers,
-		"total_overs_limit":     totalOversLimit,
-		"toss_winner_team_id":   tossWinnerTeamID,
-		"toss_decision":         tossDecision,
+		"match_id":              details.MatchID,
+		"innings_number":        details.InningsNumber,
+		"match_status":          details.MatchStatus,
+		"batting_team_id":       details.BattingTeamID,
+		"bowling_team_id":       details.BowlingTeamID,
+		"batting_team_name":     details.BattingTeamName,
+		"bowling_team_name":     details.BowlingTeamName,
+		"batting_players":       details.BattingPlayers,
+		"bowling_players":       details.BowlingPlayers,
+		"active_striker_id":     details.ActiveStrikerID,
+		"active_non_striker_id": details.ActiveNonStrikerID,
+		"active_bowler_id":      details.ActiveBowlerID,
+		"total_runs":            details.TotalRuns,
+		"total_wickets":         details.TotalWickets,
+		"total_overs":           details.TotalOvers,
+		"total_overs_limit":     details.TotalOversLimit,
+		"toss_winner_team_id":   details.TossWinnerTeamID,
+		"toss_decision":         details.TossDecision,
 		"target_score":          targetScore,
 	})
 }

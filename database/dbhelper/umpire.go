@@ -102,30 +102,22 @@ func fetchNextPlayerStats(tx *sqlx.Tx, matchID string, playerArg *string) *model
 	return stats
 }
 
-//record ball by ball
-func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) (*models.RecordBallResponseDetails, error) {
-	tx, err := db.KhiladiDb.Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	var isCompleted bool
-	err = tx.Get(&isCompleted, `SELECT EXISTS(SELECT 1 FROM matches WHERE id = $1 AND status = 'completed')`, matchID)
-	if err == nil && isCompleted {
-		return nil, fmt.Errorf("validation error: cannot record ball, match is already completed")
+// validateRecordBall checks if a ball can be legally recorded based on match status
+func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req models.RecordBallRequest) error {
+	if matchStatus == "completed" {
+		return fmt.Errorf("validation error: cannot record ball, match is already completed")
 	}
 	
 	// Validate that the striker and non-striker if they are out or not
 	var strikerDismissed bool
-	err = tx.Get(&strikerDismissed, `
+	err := tx.Get(&strikerDismissed, `
 		SELECT EXISTS (
 			SELECT 1 FROM balls 
 			WHERE innings_id = $1 AND dismissed_player_id = $2 AND is_wicket = TRUE
 		)
 	`, inningsID, req.StrikerID)
 	if err == nil && strikerDismissed {
-		return nil, fmt.Errorf("validation error: striker %s has already been dismissed in this innings", req.StrikerID)
+		return fmt.Errorf("validation error: striker %s has already been dismissed in this innings", req.StrikerID)
 	}
 
 	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
@@ -137,7 +129,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 			)
 		`, inningsID, *req.NonStrikerID)
 		if err == nil && nonStrikerDismissed {
-			return nil, fmt.Errorf("validation error: non-striker %s has already been dismissed in this innings", *req.NonStrikerID)
+			return fmt.Errorf("validation error: non-striker %s has already been dismissed in this innings", *req.NonStrikerID)
 		}
 	}
 
@@ -156,8 +148,141 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	if (isFreeHit || isCurrentNoBall) && req.IsWicket && req.DismissalType != nil {
 		dtype := strings.ToLower(*req.DismissalType)
 		if dtype != "runout" && dtype != "retired_hurt" {
-			return nil, fmt.Errorf("validation error: on a no-ball or free hit, a batsman can only be out by run out or retired hurt")
+			return fmt.Errorf("validation error: on a no-ball or free hit, a batsman can only be out by run out or retired hurt")
 		}
+	}
+	return nil
+}
+
+// inning refinement after inning completion and checks
+func checkAndUpdateInningsMatchCompletion(
+	tx *sqlx.Tx,
+	matchID string,
+	inningsID string,
+	inningsNumber int,
+	totalRuns int,
+	totalWickets int,
+	totalOvers float64,
+	battingTeamID string,
+	bowlingTeamID string,
+	totalOversLimit int,
+) error {
+	completedOvers := int(totalOvers)
+	balls := int(math.Round((totalOvers - float64(completedOvers)) * 10))
+	totalBalls := completedOvers*6 + balls
+
+	var teamSize int
+	err := tx.Get(&teamSize, `
+		SELECT COUNT(DISTINCT player_id) 
+		FROM (
+			SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			UNION
+			SELECT common_player_id AS player_id FROM matches WHERE id = $1 AND common_player_id IS NOT NULL
+		) all_players`, matchID, battingTeamID)
+	if err != nil {
+		teamSize = 11 // fallback size
+	}
+
+	isOversFinished := totalBalls >= totalOversLimit*6
+	isAllOut := totalWickets == 11 || totalWickets >= teamSize
+
+	
+	isInningsComplete := false
+	isMatchComplete := false
+	var winnerTeamID *string
+
+	if inningsNumber == 1 {
+		if isOversFinished || isAllOut {
+			isInningsComplete = true
+		}
+	} else if inningsNumber == 2 {
+		var innings1Runs int
+		err = tx.Get(&innings1Runs, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, matchID)
+		if err == nil {
+			chasedTarget := totalRuns >= innings1Runs+1
+
+			if chasedTarget {
+				isInningsComplete = true
+				isMatchComplete = true
+				winnerTeamID = &battingTeamID
+			} else if isOversFinished || isAllOut {
+				isInningsComplete = true
+				isMatchComplete = true
+				if totalRuns < innings1Runs {
+					winnerTeamID = &bowlingTeamID
+				}
+			}
+		}
+	}
+
+	if isInningsComplete {
+		// Finalize surviving batsmen
+		_, _ = tx.Exec(`
+			UPDATE player_match_stats 
+			SET is_not_out = TRUE 
+			WHERE match_id = $1 
+			AND dismissal_type IS NULL 
+			AND (
+				runs_scored > 0 
+				OR balls_faced > 0 
+				OR player_id = (SELECT active_striker_id FROM innings WHERE id = $3)
+				OR player_id = (SELECT active_non_striker_id FROM innings WHERE id = $3)
+			)
+			AND player_id IN (
+				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			)`, matchID, battingTeamID, inningsID)
+
+		// Close innings
+		_, _ = tx.Exec(`
+			UPDATE innings 
+			SET status = 'completed', 
+			    active_striker_id = NULL, 
+			    active_non_striker_id = NULL, 
+			    active_bowler_id = NULL, 
+			    updated_at = NOW() 
+			WHERE id = $1`, inningsID)
+	}
+
+	if isMatchComplete {
+		// Close match & record winner
+		_, err = tx.Exec(`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, winnerTeamID, matchID)
+		if err == nil {
+			// Update career wins and matches played
+			_, _ = tx.Exec(`
+				UPDATE player_stats SET
+					career_matches = career_matches + 1,
+					career_wins = career_wins + CASE WHEN $2::uuid IS NOT NULL AND id IN (
+						SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2::uuid
+					) THEN 1 ELSE 0 END,
+					updated_at = NOW()
+				WHERE id IN (
+					SELECT player_id FROM match_players WHERE match_id = $1
+				)`, matchID, winnerTeamID)
+		}
+	}
+
+	return nil
+}
+
+//record ball by ball
+func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) (*models.RecordBallResponseDetails, error) {
+	tx, err := db.KhiladiDb.Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var matchInfo struct {
+		Status     string `db:"status"`
+		TotalOvers int    `db:"total_overs"`
+	}
+	err = tx.Get(&matchInfo, `SELECT status, total_overs FROM matches WHERE id = $1`, matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch match details: %w", err)
+	}
+
+	if err = validateRecordBall(tx, inningsID, matchInfo.Status, req); err != nil {
+		return nil, err
 	}
 
 	// Insert the raw ball record
@@ -202,8 +327,6 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to fetch current innings: %w", err)
 	}
 
-
-
 	// Update non-striker stats if active
 	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
 		if err = UpdateNonStrikerStatsTx(tx, matchID, *req.NonStrikerID); err != nil {
@@ -229,146 +352,17 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	}
 
 	// Check and update Innings/Match Completion and Winner
-	var totalOversLimit int
-	err = tx.Get(&totalOversLimit, `SELECT total_overs FROM matches WHERE id = $1`, matchID)
-	if err == nil {
-		completedOvers := int(currentInnings.TotalOvers)
-		balls := int(math.Round((currentInnings.TotalOvers - float64(completedOvers)) * 10))
-		totalBalls := completedOvers*6 + balls
-
-		var teamSize int
-		err = tx.Get(&teamSize, `SELECT COUNT(*) FROM match_players WHERE match_id = $1 AND team_id = $2`, matchID, currentInnings.BattingTeamID)
-		if err != nil {
-			teamSize = 11 // fallback size
-		}
-
-		isOversFinished := totalBalls >= totalOversLimit*6
-		isAllOut := currentInnings.TotalWickets == 11 || currentInnings.TotalWickets >= teamSize
-
-		// Innings 1 Completion Check
-		if currentInnings.InningsNumber == 1 {
-			if isOversFinished || isAllOut {
-				// Finalize surviving batsmen for Innings 1 (while active_striker_id/active_non_striker_id are still set)
-				_, _ = tx.Exec(`
-					UPDATE player_match_stats 
-					SET is_not_out = TRUE 
-					WHERE match_id = $1 
-					AND dismissal_type IS NULL 
-					AND (
-						runs_scored > 0 
-						OR balls_faced > 0 
-						OR player_id = (SELECT active_striker_id FROM innings WHERE id = $3)
-						OR player_id = (SELECT active_non_striker_id FROM innings WHERE id = $3)
-					)
-					AND player_id IN (
-						SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-					)`, matchID, currentInnings.BattingTeamID, inningsID)
-
-				// Clear active players in innings table and mark as completed
-				_, _ = tx.Exec(`
-					UPDATE innings 
-					SET status = 'completed', 
-					    active_striker_id = NULL, 
-					    active_non_striker_id = NULL, 
-					    active_bowler_id = NULL, 
-					    updated_at = NOW() 
-					WHERE id = $1`, inningsID)
-			}
-		}
-
-		// Innings 2 Completion Check
-		if currentInnings.InningsNumber == 2 {
-			var innings1Runs int
-			err = tx.Get(&innings1Runs, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, matchID)
-			if err == nil {
-				chasedTarget := currentInnings.TotalRuns >= innings1Runs+1
-
-				if chasedTarget {
-					// Finalize surviving batsmen for Innings 2
-					_, _ = tx.Exec(`
-						UPDATE player_match_stats 
-						SET is_not_out = TRUE 
-						WHERE match_id = $1 
-						AND dismissal_type IS NULL 
-						AND (
-							runs_scored > 0 
-							OR balls_faced > 0 
-							OR player_id = (SELECT active_striker_id FROM innings WHERE id = $3)
-							OR player_id = (SELECT active_non_striker_id FROM innings WHERE id = $3)
-						)
-						AND player_id IN (
-							SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-						)`, matchID, currentInnings.BattingTeamID, inningsID)
-
-					
-					_, _ = tx.Exec(`
-						UPDATE innings 
-						SET status = 'completed', 
-						    active_striker_id = NULL, 
-						    active_non_striker_id = NULL, 
-						    active_bowler_id = NULL, 
-						    updated_at = NOW() 
-						WHERE id = $1`, inningsID)
-					_, err = tx.Exec(
-						`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, currentInnings.BattingTeamID, matchID)
-
-					if err == nil {
-						_, _ = tx.Exec(`
-							UPDATE player_stats SET
-								career_matches = career_matches + 1,
-								career_wins = career_wins + CASE WHEN id IN (
-									SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-								) THEN 1 ELSE 0 END,
-								updated_at = NOW()
-							WHERE id IN (
-								SELECT player_id FROM match_players WHERE match_id = $1
-							)`, matchID, currentInnings.BattingTeamID)
-					}
-				} else if isOversFinished || isAllOut {
-					_, _ = tx.Exec(`
-						UPDATE player_match_stats 
-						SET is_not_out = TRUE 
-						WHERE match_id = $1 
-						AND dismissal_type IS NULL 
-						AND (
-							runs_scored > 0 
-							OR balls_faced > 0 
-							OR player_id = (SELECT active_striker_id FROM innings WHERE id = $3)
-							OR player_id = (SELECT active_non_striker_id FROM innings WHERE id = $3)
-						)
-						AND player_id IN (
-							SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-						)`, matchID, currentInnings.BattingTeamID, inningsID)
-
-					
-					_, _ = tx.Exec(`
-						UPDATE innings 
-						SET status = 'completed', 
-						    active_striker_id = NULL, 
-						    active_non_striker_id = NULL, 
-						    active_bowler_id = NULL, 
-						    updated_at = NOW() 
-						WHERE id = $1`, inningsID)
-					var winnerTeamID *string
-					if currentInnings.TotalRuns < innings1Runs {
-						winnerTeamID = &currentInnings.BowlingTeamID
-					}
-					_, err = tx.Exec(`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, winnerTeamID, matchID)
-					if err == nil {
-						_, _ = tx.Exec(`
-							UPDATE player_stats SET
-								career_matches = career_matches + 1,
-								career_wins = career_wins + CASE WHEN $2::uuid IS NOT NULL AND id IN (
-									SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2::uuid
-								) THEN 1 ELSE 0 END,
-								updated_at = NOW()
-							WHERE id IN (
-								SELECT player_id FROM match_players WHERE match_id = $1
-							)`, matchID, winnerTeamID)
-					}
-				}
-			}
-		}
+	if err = checkAndUpdateInningsMatchCompletion(
+		tx, matchID, inningsID,
+		currentInnings.InningsNumber,
+		currentInnings.TotalRuns,
+		currentInnings.TotalWickets,
+		currentInnings.TotalOvers,
+		currentInnings.BattingTeamID,
+		currentInnings.BowlingTeamID,
+		matchInfo.TotalOvers,
+	); err != nil {
+		return nil, err
 	}
 
 	// Determine next active players and persist them (only if the innings is not completed yet)
@@ -392,7 +386,6 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to update next active players: %w", err)
 	}
 
-	
 	result := models.RecordBallResponseDetails{
 		Striker:          fetchNextPlayerStats(tx, matchID, strikerArg),
 		NonStriker:       fetchNextPlayerStats(tx, matchID, nonStrikerArg),
