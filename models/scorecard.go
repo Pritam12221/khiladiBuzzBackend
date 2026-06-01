@@ -115,11 +115,11 @@ type BatStat struct {
 }
 
 type BowlStat struct {
-	PlayerID    string  `db:"player_id"`
-	Name        string  `db:"player_name"`
-	OversBowled float64 `db:"overs_bowled"`
-	RunsGiven   int     `db:"runs_given"`
-	Wickets     int     `db:"wickets_taken"`
+	PlayerID    string  `json:"player_id" db:"player_id"`
+	Name        string  `json:"player_name" db:"player_name"`
+	OversBowled float64 `json:"overs_bowled" db:"overs_bowled"`
+	RunsGiven   int     `json:"runs_given" db:"runs_given"`
+	Wickets     int     `json:"wickets" db:"wickets_taken"`
 }
 
 type TopBatsmanRow struct {

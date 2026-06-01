@@ -84,21 +84,6 @@ func UpdateStrikerStatsTx(tx *sqlx.Tx, matchID string, strikerID string, runsSco
 			updated_at  = NOW()`,
 		matchID, strikerID, runsForBatsman, ballsFacedInc, foursInc, sixesInc,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Update overall stats 
-	_, err = tx.Exec(`
-		UPDATE player_stats SET
-			career_runs         = career_runs + $1,
-			career_balls_faced  = career_balls_faced + $2,
-			career_fours        = career_fours + $3,
-			career_sixes        = career_sixes + $4,
-			updated_at          = NOW()
-		WHERE id = $5`,
-		runsForBatsman, ballsFacedInc, foursInc, sixesInc, strikerID,
-	)
 	return err
 }
 
@@ -149,25 +134,6 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallReque
 			updated_at    = NOW()`
 
 	_, err = tx.Exec(query, matchID, req.BowlerID, bowlerRuns, bowlerWickets, newOvers)
-	if err != nil {
-		return err
-	}
-
-	// Update overall stats
-	ballsBowledInc := 0
-	if isLegal {
-		ballsBowledInc = 1
-	}
-
-	_, err = tx.Exec(`
-		UPDATE player_stats SET
-			career_runs_given   = career_runs_given + $1,
-			career_wickets      = career_wickets + $2,
-			career_balls_bowled = career_balls_bowled + $3,
-			updated_at          = NOW()
-		WHERE id = $4`,
-		bowlerRuns, bowlerWickets, ballsBowledInc, req.BowlerID,
-	)
 	return err
 }
 
@@ -266,7 +232,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 	}
 
 	type MatchPlayerRow struct {
-		models.Player
+		models.MatchRosterPlayer
 		TeamID string `db:"team_id"`
 	}
 
@@ -292,8 +258,8 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		return nil, fmt.Errorf("failed to fetch match players: %w", err)
 	}
 
-	battingPlayers := []models.Player{}
-	bowlingPlayers := []models.Player{}
+	battingPlayers := []models.MatchRosterPlayer{}
+	bowlingPlayers := []models.MatchRosterPlayer{}
 
 	seenBatting := make(map[string]bool)
 	seenBowling := make(map[string]bool)
@@ -302,24 +268,29 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		isCommon := innings.CommonPlayerID != nil && row.ID == *innings.CommonPlayerID
 		if isCommon {
 			if !seenBatting[row.ID] {
-				battingPlayers = append(battingPlayers, row.Player)
+				battingPlayers = append(battingPlayers, row.MatchRosterPlayer)
 				seenBatting[row.ID] = true
 			}
 			if !seenBowling[row.ID] {
-				bowlingPlayers = append(bowlingPlayers, row.Player)
+				bowlingPlayers = append(bowlingPlayers, row.MatchRosterPlayer)
 				seenBowling[row.ID] = true
 			}
 		} else if strings.EqualFold(row.TeamID, innings.BattingTeamID) {
 			if !seenBatting[row.ID] {
-				battingPlayers = append(battingPlayers, row.Player)
+				battingPlayers = append(battingPlayers, row.MatchRosterPlayer)
 				seenBatting[row.ID] = true
 			}
 		} else if strings.EqualFold(row.TeamID, innings.BowlingTeamID) {
 			if !seenBowling[row.ID] {
-				bowlingPlayers = append(bowlingPlayers, row.Player)
+				bowlingPlayers = append(bowlingPlayers, row.MatchRosterPlayer)
 				seenBowling[row.ID] = true
 			}
 		}
+	}
+
+	bowlStats, err := FetchBowlingStats(innings.MatchID, inningsID, innings.BowlingTeamID)
+	if err != nil {
+		bowlStats = []models.BowlStat{}
 	}
 
 	details := &models.InningsPlayersDetails{
@@ -341,6 +312,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		TotalOversLimit:    innings.TotalOversLimit,
 		TossWinnerTeamID:   innings.TossWinnerTeamID,
 		TossDecision:       innings.TossDecision,
+		BowlerStats:        bowlStats,
 	}
 
 	return details, nil

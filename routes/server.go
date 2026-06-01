@@ -67,6 +67,7 @@ func ServerRoutes() *gin.Engine {
 		{
 			innings.GET("/:id/players", handlers.GetInningsPlayers)
 			innings.PUT("/:id/active-players", handlers.UpdateActivePlayers)
+			innings.POST("/:id/undo", handlers.UndoLastBall)
 		}
 
 		// Players 

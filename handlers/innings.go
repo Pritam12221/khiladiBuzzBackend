@@ -52,6 +52,7 @@ func GetInningsPlayers(c *gin.Context) {
 		"toss_winner_team_id":   details.TossWinnerTeamID,
 		"toss_decision":         details.TossDecision,
 		"target_score":          targetScore,
+		"bowler_stats":          details.BowlerStats,
 	})
 }
 
@@ -101,5 +102,52 @@ func CreateInnings(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message":    "innings created successfully",
 		"innings_id": inningsID,
+	})
+}
+
+func UndoLastBall(c *gin.Context) {
+	inningsID := c.Param("id")
+	if inningsID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "innings id is required"})
+		return
+	}
+
+	details, err := dbhelper.UndoLastBall(inningsID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var targetScore *int
+	if details.InningsNumber == 2 {
+		var firstInningsRuns int
+		err := db.KhiladiDb.Get(&firstInningsRuns, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, details.MatchID)
+		if err == nil {
+			target := firstInningsRuns + 1
+			targetScore = &target
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"match_id":              details.MatchID,
+		"innings_number":        details.InningsNumber,
+		"match_status":          details.MatchStatus,
+		"batting_team_id":       details.BattingTeamID,
+		"bowling_team_id":       details.BowlingTeamID,
+		"batting_team_name":     details.BattingTeamName,
+		"bowling_team_name":     details.BowlingTeamName,
+		"batting_players":       details.BattingPlayers,
+		"bowling_players":       details.BowlingPlayers,
+		"active_striker_id":     details.ActiveStrikerID,
+		"active_non_striker_id": details.ActiveNonStrikerID,
+		"active_bowler_id":      details.ActiveBowlerID,
+		"total_runs":            details.TotalRuns,
+		"total_wickets":         details.TotalWickets,
+		"total_overs":           details.TotalOvers,
+		"total_overs_limit":     details.TotalOversLimit,
+		"toss_winner_team_id":   details.TossWinnerTeamID,
+		"toss_decision":         details.TossDecision,
+		"target_score":          targetScore,
+		"bowler_stats":          details.BowlerStats,
 	})
 }

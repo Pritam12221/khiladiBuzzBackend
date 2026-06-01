@@ -38,3 +38,13 @@ type CreatePlayerRequest struct {
 	PhoneNumber string `json:"phone_number" binding:"required"`
 	Role        string `json:"role"`
 }
+
+type MatchRosterPlayer struct {
+	ID           string  `db:"id" json:"id"`
+	UserID       *string `db:"user_id" json:"user_id"`
+	PlayerName   string  `db:"player_name" json:"player_name"`
+	PhoneNumber  *string `db:"phone_number" json:"phone_number"`
+	Role         *string `db:"role" json:"role"`
+	BattingStyle *string `db:"batting_style" json:"batting_style"`
+	BowlingStyle *string `db:"bowling_style" json:"bowling_style"`
+}

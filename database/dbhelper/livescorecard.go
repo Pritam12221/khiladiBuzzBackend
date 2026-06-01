@@ -106,80 +106,10 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	}
 
 	for _, inn := range innings {
-		teamName := match.TeamA
-		if inn.BattingTeamID == match.TeamBID {
-			teamName = match.TeamB
-		}
-
-		innData := models.InningsData{
-			TeamName:      teamName,
-			Runs:          inn.TotalRuns,
-			Wickets:       inn.TotalWickets,
-			Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
-			Batting:       []models.BatsmanRow{},
-			Bowling:       []models.BowlerRow{},
-			YetToBat:      []string{},
-			FallOfWickets: []string{}, // Skipped for now
-			TopBatsmen:    []models.TopBatsman{},
-			TopBowlers:    []models.TopBowler{},
-			Extras:        models.ExtrasSummary{},
-		}
-
-		// track order of player which they are batting
-		balls, _ := FetchInningsBalls(inn.ID)
-		orderedBatsmenIDs, seenBatsmen := getOrderedBatsmen(balls, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
-		orderedBowlersIDs, seenBowlers := getOrderedBowlers(balls, inn.ActiveBowlerID)
-
-		// Populate Batting stats
-		batStats, err := FetchBattingStats(matchID, inn.ID, inn.BattingTeamID)
+		innData, err := populateInningsData(match, inn)
 		if err != nil {
-			fmt.Printf("livescorecard: FetchBattingStats error: %v\n", err)
 			return nil, err
 		}
-		innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, seenBatsmen, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
-
-		// Populate bowlers stats 
-		activeBowlerID := ""
-		if inn.ActiveBowlerID != nil {
-			activeBowlerID = *inn.ActiveBowlerID
-		}
-		bowlStats, err := FetchBowlingStats(matchID, inn.ID, inn.BowlingTeamID)
-		if err != nil {
-			fmt.Printf("livescorecard: FetchBowlingStats error: %v\n", err)
-			return nil, err
-		}
-		
-		if activeBowlerID != "" && inn.ActiveBowlerName != nil {
-			found := false
-			for _, bs := range bowlStats {
-				if bs.PlayerID == activeBowlerID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				bowlStats = append(bowlStats, models.BowlStat{
-					PlayerID: activeBowlerID,
-					Name:     *inn.ActiveBowlerName,
-				})
-			}
-		}
-		innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, seenBowlers, activeBowlerID)
-
-		// fetch total innings
-		innData.Extras, _ = FetchInningsExtras(inn.ID)
-
-		// Populate Yet to Bat Players
-		innData.YetToBat, _ = FetchYetToBat(matchID, inn.BattingTeamID, seenBatsmen)
-
-		// summary table 
-		if match.Status == "completed" {
-			innData.TopBatsmen, _ = FetchTopBatsmenSummary(matchID, inn.BattingTeamID)
-			innData.TopBowlers, _ = FetchTopBowlersSummary(matchID, inn.BowlingTeamID)
-		}
-
-		// to handle solo player
-		normalizeInningsData(&innData)
 
 		if inn.InningsNumber == 1 {
 			scorecard.Innings1 = innData
@@ -324,20 +254,25 @@ func FetchBattingStats(matchID, inningsID, battingTeamID string) ([]models.BatSt
 		SELECT 
 			p.id as player_id,
 			u.name as player_name,
-			COALESCE((SELECT SUM(runs_scored) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide')), 0) as runs_scored,
-			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide')), 0) as balls_faced,
-			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide') AND runs_scored = 4), 0) as fours,
-			COALESCE((SELECT COUNT(*) FROM balls WHERE innings_id = $1 AND striker_id = p.id AND (extra_type IS NULL OR extra_type::text != 'wide') AND runs_scored = 6), 0) as sixes,
-			CASE WHEN EXISTS(SELECT 1 FROM balls WHERE innings_id = $1 AND dismissed_player_id = p.id) THEN FALSE ELSE TRUE END as is_not_out,
-			(SELECT dismissal_type FROM balls WHERE innings_id = $1 AND dismissed_player_id = p.id LIMIT 1) as dismissal_type,
-			(SELECT u_bowl.name FROM balls b JOIN player_stats pb ON b.bowler_id = pb.id JOIN users u_bowl ON pb.user_id = u_bowl.id WHERE b.innings_id = $1 AND b.dismissed_player_id = p.id LIMIT 1) as bowler_name,
-			NULL::text as fielder_name
+			COALESCE(pms.runs_scored, 0) as runs_scored,
+			COALESCE(pms.balls_faced, 0) as balls_faced,
+			COALESCE(pms.fours, 0) as fours,
+			COALESCE(pms.sixes, 0) as sixes,
+			COALESCE(pms.is_not_out, TRUE) as is_not_out,
+			pms.dismissal_type,
+			u_bowl.name as bowler_name,
+			u_field.name as fielder_name
 		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $2 AND mp.team_id = $3
-		WHERE (mp.match_id = $2 AND mp.team_id = $3)
-		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $2))`
-	err := db.KhiladiDb.Select(&batStats, query, inningsID, matchID, battingTeamID)
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
+		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.match_id = $1
+		LEFT JOIN player_stats pb ON pms.dismissed_by = pb.id
+		LEFT JOIN users u_bowl ON pb.user_id = u_bowl.id
+		LEFT JOIN player_stats pf ON pms.fielder_id = pf.id
+		LEFT JOIN users u_field ON pf.user_id = u_field.id
+		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))`
+	err := db.KhiladiDb.Select(&batStats, query, matchID, battingTeamID)
 	return batStats, err
 }
 
@@ -348,30 +283,16 @@ func FetchBowlingStats(matchID, inningsID, bowlingTeamID string) ([]models.BowlS
 		SELECT 
 			p.id as player_id,
 			u.name as player_name,
-			COALESCE((
-				SELECT (total_balls / 6)::float + (total_balls % 6)::float * 0.1
-				FROM (
-					SELECT COUNT(*) as total_balls 
-					FROM balls 
-					WHERE innings_id = $1 AND bowler_id = p.id AND (extra_type IS NULL OR extra_type::text NOT IN ('wide', 'no_ball'))
-				) tb
-			), 0.0) as overs_bowled,
-			COALESCE((
-				SELECT SUM(runs_scored + extras_runs + CASE WHEN extra_type::text IN ('wide', 'no_ball') THEN 1 ELSE 0 END) 
-				FROM balls 
-				WHERE innings_id = $1 AND bowler_id = p.id AND (extra_type IS NULL OR extra_type::text NOT IN ('bye', 'leg_bye'))
-			), 0) as runs_given,
-			COALESCE((
-				SELECT COUNT(*) 
-				FROM balls 
-				WHERE innings_id = $1 AND bowler_id = p.id AND is_wicket = TRUE AND dismissal_type IS NOT NULL AND dismissal_type::text NOT IN ('runout', 'retired_hurt')
-			), 0) as wickets_taken
+			COALESCE(pms.overs_bowled, 0.0) as overs_bowled,
+			COALESCE(pms.runs_given, 0) as runs_given,
+			COALESCE(pms.wickets_taken, 0) as wickets_taken
 		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $2 AND mp.team_id = $3
-		WHERE (mp.match_id = $2 AND mp.team_id = $3)
-		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $2))`
-	err := db.KhiladiDb.Select(&bowlStats, query, inningsID, matchID, bowlingTeamID)
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
+		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.match_id = $1
+		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))`
+	err := db.KhiladiDb.Select(&bowlStats, query, matchID, bowlingTeamID)
 	return bowlStats, err
 }
 
