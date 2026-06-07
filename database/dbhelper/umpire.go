@@ -147,8 +147,8 @@ func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req m
 
 	if (isFreeHit || isCurrentNoBall) && req.IsWicket && req.DismissalType != nil {
 		dtype := strings.ToLower(*req.DismissalType)
-		if dtype != "runout" && dtype != "retired_hurt" {
-			return fmt.Errorf("validation error: on a no-ball or free hit, a batsman can only be out by run out or retired hurt")
+		if dtype != "runout" && dtype != "retired_out" {
+			return fmt.Errorf("validation error: on a no-ball or free hit, a batsman can only be out by run out or retired out")
 		}
 	}
 	return nil

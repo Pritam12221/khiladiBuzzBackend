@@ -98,7 +98,7 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallReque
 	}
 
 	bowlerWickets := 0
-	if req.IsWicket && req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_hurt" {
+	if req.IsWicket && req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_out" {
 		bowlerWickets = 1
 	}
 
@@ -144,7 +144,7 @@ func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, matchID string, req models.Record
 	}
 
 	var bowlerIDVal *string
-	if req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_hurt" {
+	if req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_out" {
 		bowlerIDVal = &req.BowlerID
 	}
 
@@ -192,6 +192,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		BattingTeamName    string  `db:"batting_team_name"`
 		BowlingTeamName    string  `db:"bowling_team_name"`
 		MatchStatus        string  `db:"match_status"`
+		InningsStatus      string  `db:"innings_status"`
 		ActiveStrikerID    *string `db:"active_striker_id"`
 		ActiveNonStrikerID *string `db:"active_non_striker_id"`
 		ActiveBowlerID     *string `db:"active_bowler_id"`
@@ -207,6 +208,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		SELECT 
 			i.match_id, 
 			i.innings_number,
+			i.status AS innings_status,
 			i.batting_team_id, 
 			i.bowling_team_id,
 			t1.team_name AS batting_team_name,
@@ -293,10 +295,61 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		bowlStats = []models.BowlStat{}
 	}
 
+	var strikerStats *models.PlayerStatsSummary
+	var nonStrikerStats *models.PlayerStatsSummary
+
+	if innings.ActiveStrikerID != nil && *innings.ActiveStrikerID != "" {
+		var stats models.PlayerStatsSummary
+		err := db.KhiladiDb.Get(&stats, `
+			SELECT player_id, runs_scored, balls_faced, fours, sixes, COALESCE(is_not_out, FALSE) as is_not_out, dismissal_type, dismissed_by, runs_given, wickets_taken, overs_bowled
+			FROM player_match_stats
+			WHERE match_id = $1 AND player_id = $2`,
+			innings.MatchID, *innings.ActiveStrikerID,
+		)
+		if err == nil {
+			strikerStats = &stats
+		} else {
+			strikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveStrikerID}
+		}
+	}
+	if innings.ActiveNonStrikerID != nil && *innings.ActiveNonStrikerID != "" {
+		var stats models.PlayerStatsSummary
+		err := db.KhiladiDb.Get(&stats, `
+			SELECT player_id, runs_scored, balls_faced, fours, sixes, COALESCE(is_not_out, FALSE) as is_not_out, dismissal_type, dismissed_by, runs_given, wickets_taken, overs_bowled
+			FROM player_match_stats
+			WHERE match_id = $1 AND player_id = $2`,
+			innings.MatchID, *innings.ActiveNonStrikerID,
+		)
+		if err == nil {
+			nonStrikerStats = &stats
+		} else {
+			nonStrikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveNonStrikerID}
+		}
+	}
+
+	var targetScore *int
+	var firstInningsRuns *int
+	var firstInningsWickets *int
+
+	if innings.InningsNumber == 2 {
+		var firstInnings struct {
+			Runs    int `db:"total_runs"`
+			Wickets int `db:"total_wickets"`
+		}
+		err := db.KhiladiDb.Get(&firstInnings, `SELECT total_runs, total_wickets FROM innings WHERE match_id = $1 AND innings_number = 1`, innings.MatchID)
+		if err == nil {
+			target := firstInnings.Runs + 1
+			targetScore = &target
+			firstInningsRuns = &firstInnings.Runs
+			firstInningsWickets = &firstInnings.Wickets
+		}
+	}
+
 	details := &models.InningsPlayersDetails{
 		MatchID:            innings.MatchID,
 		InningsNumber:      innings.InningsNumber,
 		MatchStatus:        innings.MatchStatus,
+		InningsStatus:      innings.InningsStatus,
 		BattingTeamID:      innings.BattingTeamID,
 		BowlingTeamID:      innings.BowlingTeamID,
 		BattingTeamName:    innings.BattingTeamName,
@@ -306,12 +359,17 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		ActiveStrikerID:    innings.ActiveStrikerID,
 		ActiveNonStrikerID: innings.ActiveNonStrikerID,
 		ActiveBowlerID:     innings.ActiveBowlerID,
+		StrikerStats:       strikerStats,
+		NonStrikerStats:    nonStrikerStats,
 		TotalRuns:          innings.TotalRuns,
 		TotalWickets:       innings.TotalWickets,
 		TotalOvers:         innings.TotalOvers,
 		TotalOversLimit:    innings.TotalOversLimit,
 		TossWinnerTeamID:   innings.TossWinnerTeamID,
 		TossDecision:       innings.TossDecision,
+		TargetScore:        targetScore,
+		FirstInningsRuns:   firstInningsRuns,
+		FirstInningsWickets: firstInningsWickets,
 		BowlerStats:        bowlStats,
 	}
 

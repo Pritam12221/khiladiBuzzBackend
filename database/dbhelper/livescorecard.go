@@ -16,10 +16,12 @@ func populateInningsData(match *matchRow, inn inningsRow) (models.InningsData, e
 	}
 
 	innData := models.InningsData{
+		ID:            inn.ID,
 		TeamName:      teamName,
 		Runs:          inn.TotalRuns,
 		Wickets:       inn.TotalWickets,
 		Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
+		Status:        inn.Status,
 		Batting:       []models.BatsmanRow{},
 		Bowling:       []models.BowlerRow{},
 		YetToBat:      []string{},
@@ -173,6 +175,7 @@ type matchRow struct {
 	TossDecision     string  `db:"toss_decision"`
 	CreatedAt        string  `db:"created_at"`
 	WinnerTeamID     *string `db:"winner_team_id"`
+	HostID           string  `db:"host_id"`
 	HostName         *string `db:"host_name"`
 	UmpireName       *string `db:"umpire_name"`
 }
@@ -192,6 +195,7 @@ func fetchMatchMetadata(matchID string) (*matchRow, error) {
 			m.toss_decision,
 			TO_CHAR(m.created_at, 'Mon DD, YYYY') as created_at,
 			m.winner_team_id,
+			m.host_id,
 			u_host.name as host_name,
 			u_umpire.name as umpire_name
 		FROM matches m
@@ -212,6 +216,7 @@ type inningsRow struct {
 	TotalRuns          int     `db:"total_runs"`
 	TotalWickets       int     `db:"total_wickets"`
 	TotalOvers         float64 `db:"total_overs"`
+	Status             string  `db:"status"`
 	ActiveStrikerID    *string `db:"active_striker_id"`
 	ActiveNonStrikerID *string `db:"active_non_striker_id"`
 	ActiveBowlerID     *string `db:"active_bowler_id"`
@@ -223,7 +228,7 @@ func fetchMatchInningsRows(matchID string) ([]inningsRow, error) {
 	query := `
 		SELECT 
 			i.id, i.innings_number, i.batting_team_id, i.bowling_team_id,
-			i.total_runs, i.total_wickets, i.total_overs,
+			i.total_runs, i.total_wickets, i.total_overs, i.status,
 			i.active_striker_id, i.active_non_striker_id, i.active_bowler_id,
 			ub.name as active_bowler_name
 		FROM innings i
@@ -560,6 +565,8 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		ID:           match.ID,
 		TeamA:        match.TeamA,
 		TeamB:        match.TeamB,
+		Team1ID:      match.TeamAID,
+		Team2ID:      match.TeamBID,
 		Status:       match.Status,
 		StatusText:   statusText,
 		ResultText:   resultTextVal,
@@ -569,6 +576,7 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		TossDecision: match.TossDecision,
 		Umpire:       umpireName,
 		Host:         hostName,
+		HostID:       match.HostID,
 	}
 }
 

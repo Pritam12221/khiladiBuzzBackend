@@ -58,10 +58,12 @@ type PlayingSquad struct {
 }
 
 type InningsData struct {
+	ID            string       `json:"id"`
 	TeamName      string       `json:"teamName"`
 	Runs          int          `json:"runs"`
 	Wickets       int          `json:"wickets"`
 	Overs         string       `json:"overs"`
+	Status        string       `json:"status"`
 	Batting       []BatsmanRow `json:"batting"`
 	Bowling       []BowlerRow  `json:"bowling"`
 	YetToBat      []string     `json:"yetToBat"`
@@ -75,6 +77,8 @@ type MatchDetail struct {
 	ID               string       `json:"id"`
 	TeamA            string       `json:"teamA"`
 	TeamB            string       `json:"teamB"`
+	Team1ID          string       `json:"team1_id"`
+	Team2ID          string       `json:"team2_id"`
 	Status           string       `json:"status"`
 	StatusText       string       `json:"statusText"`
 	ResultText       *string      `json:"resultText,omitempty"`
@@ -85,6 +89,7 @@ type MatchDetail struct {
 	TossDecision     string       `json:"tossDecision"`
 	Umpire           string       `json:"umpire"`
 	Host             string       `json:"host"`
+	HostID           string       `json:"host_id"`
 	PlayerOfTheMatch *struct {
 		Name      string `json:"name"`
 		Stats     string `json:"stats"`

@@ -238,7 +238,7 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 		}
 	}
 	bowlerWicketDec := 0
-	if lastBall.IsWicket && lastBall.DismissalType != nil && *lastBall.DismissalType != "runout" && *lastBall.DismissalType != "retired_hurt" {
+	if lastBall.IsWicket && lastBall.DismissalType != nil && *lastBall.DismissalType != "runout" && *lastBall.DismissalType != "retired_out" {
 		bowlerWicketDec = 1
 	}
 

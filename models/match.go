@@ -94,6 +94,7 @@ type InningsPlayersDetails struct {
 	MatchID            string   `json:"match_id"`
 	InningsNumber      int      `json:"innings_number"`
 	MatchStatus        string   `json:"match_status"`
+	InningsStatus      string   `json:"innings_status"`
 	BattingTeamID      string   `json:"batting_team_id"`
 	BowlingTeamID      string   `json:"bowling_team_id"`
 	BattingTeamName    string   `json:"batting_team_name"`
@@ -103,11 +104,16 @@ type InningsPlayersDetails struct {
 	ActiveStrikerID    *string             `json:"active_striker_id"`
 	ActiveNonStrikerID *string  `json:"active_non_striker_id"`
 	ActiveBowlerID     *string  `json:"active_bowler_id"`
+	StrikerStats       *PlayerStatsSummary `json:"striker_stats"`
+	NonStrikerStats    *PlayerStatsSummary `json:"non_striker_stats"`
 	TotalRuns          int      `json:"total_runs"`
 	TotalWickets       int      `json:"total_wickets"`
 	TotalOvers         float64  `json:"total_overs"`
 	TotalOversLimit    int      `json:"total_overs_limit"`
 	TossWinnerTeamID   *string  `json:"toss_winner_team_id"`
 	TossDecision       *string  `json:"toss_decision"`
+	TargetScore        *int     `json:"target_score"`
+	FirstInningsRuns   *int     `json:"first_innings_runs"`
+	FirstInningsWickets *int     `json:"first_innings_wickets"`
 	BowlerStats        []BowlStat `json:"bowler_stats"`
 }
