@@ -205,9 +205,10 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 		runsForBatsman = 0
 	}
 	foursDec, sixesDec := 0, 0
-	if runsForBatsman == 4 {
+	switch runsForBatsman {
+		case 4:
 		foursDec = 1
-	} else if runsForBatsman == 6 {
+		case 6:
 		sixesDec = 1
 	}
 	ballsFacedDec := 0

@@ -527,3 +527,160 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 
 	return tx.Commit()
 }
+
+// inning refinement after inning completion and checks
+func CheckAndUpdateInningsMatchCompletion(
+	tx *sqlx.Tx,
+	matchID string,
+	inningsID string,
+	inningsNumber int,
+	totalRuns int,
+	totalWickets int,
+	totalOvers float64,
+	battingTeamID string,
+	bowlingTeamID string,
+	totalOversLimit int,
+) error {
+	completedOvers := int(totalOvers)
+	balls := int(math.Round((totalOvers - float64(completedOvers)) * 10))
+	totalBalls := completedOvers*6 + balls
+
+	var teamSize int
+	err := tx.Get(&teamSize, `
+		SELECT COUNT(DISTINCT player_id) 
+		FROM (
+			SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			UNION
+			SELECT common_player_id AS player_id FROM matches WHERE id = $1 AND common_player_id IS NOT NULL
+		) all_players`, matchID, battingTeamID)
+	if err != nil {
+		teamSize = 11 // fallback size
+	}
+
+	isOversFinished := totalBalls >= totalOversLimit*6
+	isAllOut := totalWickets == 11 || totalWickets >= teamSize
+
+	
+	isInningsComplete := false
+	isMatchComplete := false
+	var winnerTeamID *string
+
+	if inningsNumber == 1 {
+		if isOversFinished || isAllOut {
+			isInningsComplete = true
+		}
+	} else if inningsNumber == 2 {
+		var innings1Runs int
+		err = tx.Get(&innings1Runs, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, matchID)
+		if err == nil {
+			chasedTarget := totalRuns >= innings1Runs+1
+
+			if chasedTarget {
+				isInningsComplete = true
+				isMatchComplete = true
+				winnerTeamID = &battingTeamID
+			} else if isOversFinished || isAllOut {
+				isInningsComplete = true
+				isMatchComplete = true
+				if totalRuns < innings1Runs {
+					winnerTeamID = &bowlingTeamID
+				}
+			}
+		}
+	}
+
+	if isInningsComplete {
+		// Finalize surviving batsmen
+		_, _ = tx.Exec(`
+			UPDATE player_match_stats 
+			SET is_not_out = TRUE 
+			WHERE match_id = $1 
+			AND dismissal_type IS NULL 
+			AND (
+				runs_scored > 0 
+				OR balls_faced > 0 
+				OR player_id = (SELECT active_striker_id FROM innings WHERE id = $3)
+				OR player_id = (SELECT active_non_striker_id FROM innings WHERE id = $3)
+			)
+			AND player_id IN (
+				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			)`, matchID, battingTeamID, inningsID)
+
+		// Close innings
+		_, _ = tx.Exec(`
+			UPDATE innings 
+			SET status = 'completed', 
+			    active_striker_id = NULL, 
+			    active_non_striker_id = NULL, 
+			    active_bowler_id = NULL, 
+			    updated_at = NOW() 
+			WHERE id = $1`, inningsID)
+	}
+
+	if isMatchComplete {
+		// Close match & record winner
+		_, err = tx.Exec(`UPDATE matches SET status = 'completed', winner_team_id = $1, updated_at = NOW() WHERE id = $2`, winnerTeamID, matchID)
+		if err != nil {
+			return fmt.Errorf("failed to close match: %w", err)
+		}
+
+		// Bulk aggregate all match statistics and update career player_stats at once
+		_, err = tx.Exec(`
+			WITH match_batting AS (
+				SELECT 
+					player_id,
+					SUM(runs_scored) as total_runs,
+					SUM(balls_faced) as total_balls_faced,
+					SUM(fours) as total_fours,
+					SUM(sixes) as total_sixes
+				FROM player_match_stats
+				WHERE match_id = $1
+				GROUP BY player_id
+			),
+			match_bowling AS (
+				SELECT 
+					b.bowler_id as player_id,
+					COUNT(*) as total_balls_bowled
+				FROM balls b
+				JOIN innings i ON b.innings_id = i.id
+				WHERE i.match_id = $1
+				  AND (b.extra_type IS NULL OR b.extra_type::text NOT IN ('wide', 'no_ball'))
+				GROUP BY b.bowler_id
+			),
+			match_bowling_stats AS (
+				SELECT 
+					player_id,
+					SUM(runs_given) as total_runs_given,
+					SUM(wickets_taken) as total_wickets
+				FROM player_match_stats
+				WHERE match_id = $1
+				GROUP BY player_id
+			)
+			UPDATE player_stats ps
+			SET
+				career_matches = ps.career_matches + 1,
+				career_wins = ps.career_wins + CASE WHEN $2::uuid IS NOT NULL AND ps.id IN (
+					SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2::uuid
+				) THEN 1 ELSE 0 END,
+				career_runs = ps.career_runs + COALESCE(mb.total_runs, 0),
+				career_balls_faced = ps.career_balls_faced + COALESCE(mb.total_balls_faced, 0),
+				career_fours = ps.career_fours + COALESCE(mb.total_fours, 0),
+				career_sixes = ps.career_sixes + COALESCE(mb.total_sixes, 0),
+				career_runs_given = ps.career_runs_given + COALESCE(mbs.total_runs_given, 0),
+				career_wickets = ps.career_wickets + COALESCE(mbs.total_wickets, 0),
+				career_balls_bowled = ps.career_balls_bowled + COALESCE(mbol.total_balls_bowled, 0),
+				updated_at = NOW()
+			FROM (
+				SELECT DISTINCT player_id FROM match_players WHERE match_id = $1
+			) mp
+			LEFT JOIN match_batting mb ON mp.player_id = mb.player_id
+			LEFT JOIN match_bowling mbol ON mp.player_id = mbol.player_id
+			LEFT JOIN match_bowling_stats mbs ON mp.player_id = mbs.player_id
+			WHERE ps.id = mp.player_id;`, matchID, winnerTeamID)
+		if err != nil {
+			return fmt.Errorf("failed to update career stats: %w", err)
+		}
+	}
+
+	return nil
+}

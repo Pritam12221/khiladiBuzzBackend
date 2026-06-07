@@ -118,17 +118,23 @@ func LogOutUser(c* gin.Context){
 func SendOTP(c *gin.Context) {
 	var req models.SendOtpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid otp request"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":"Please enter a valid 10-digit mobile number.",
+		})
 		return
 	}
 
 	exists, err := dbhelper.IsUserExist(req.PhoneNumber)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check user"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":"Unable to verify your number right now. Please try again.",
+		})
 		return
 	}
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User with this mobile number does not exist"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":"No account found with this mobile number. Please register first.",
+		})
 		return
 	}
 
@@ -138,24 +144,32 @@ func SendOTP(c *gin.Context) {
 func ForgotPassword(c *gin.Context) {
 	var req models.ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":"Please fill all fields correctly.Password must be at least 6 characters and OTP must be 4 digits.",
+		})
 		return
 	}
 
 	if req.OTP != "8080" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP code"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "The OTP you entered is incorrect. Please check and try again.",
+		})
 		return
 	}
 
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process your password. Please try again.",
+		})
 		return
 	}
 
 	err = dbhelper.UpdateUserPassword(req.PhoneNumber, hashedPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Could not reset your password. Please try again later.",
+		})
 		return
 	}
 
