@@ -167,7 +167,7 @@ func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerI
 }
 
 
-func FetchAllMatches() ([]models.MatchListItem, error) {
+func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, error) {
 	var matches []models.MatchListItem
 	query := `
 		SELECT 
@@ -193,9 +193,11 @@ func FetchAllMatches() ([]models.MatchListItem, error) {
 		JOIN teams t2 ON m.team2_id = t2.id
 		LEFT JOIN innings i1 ON m.id = i1.match_id AND i1.innings_number = 1
 		LEFT JOIN innings i2 ON m.id = i2.match_id AND i2.innings_number = 2
+		WHERE ($1 = '' OR m.status::text = $1)
 		ORDER BY m.created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	err := db.KhiladiDb.Select(&matches, query)
+	err := db.KhiladiDb.Select(&matches, query, status, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch all matches: %w", err)
 	}

@@ -3,6 +3,7 @@ package handlers
 import (
 	"khiladiBuzz/database/dbhelper"
 	"khiladiBuzz/models"
+	"khiladiBuzz/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -85,7 +86,9 @@ func RecordBall(c *gin.Context) {
 
 // FetchAllMatches for live scorecard
 func FetchAllMatches(c *gin.Context) {
-	matches, err := dbhelper.FetchAllMatches()
+	limit,offset :=utils.SetPagination(c);
+	status := c.Query("status");
+	matches, err := dbhelper.FetchAllMatches(status,limit,offset);
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch matches"})
 		return

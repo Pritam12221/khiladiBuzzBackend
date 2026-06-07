@@ -260,7 +260,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 
 	battingPlayers := []models.MatchRosterPlayer{}
 	bowlingPlayers := []models.MatchRosterPlayer{}
-
+	
 	seenBatting := make(map[string]bool)
 	seenBowling := make(map[string]bool)
 
