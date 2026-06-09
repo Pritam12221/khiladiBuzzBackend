@@ -70,6 +70,11 @@ type UpdateActivePlayersRequest struct {
 	ActiveBowlerID     *string `json:"active_bowler_id"`
 }
 
+type RetireHurtRequest struct {
+	PlayerID string `json:"player_id" binding:"required"`
+	MatchID  string `json:"match_id" binding:"required"`
+}
+
 type MatchListItem struct {
 	ID               string   `json:"id" db:"id"`
 	Team1Name        string   `json:"team1_name" db:"team1_name"`

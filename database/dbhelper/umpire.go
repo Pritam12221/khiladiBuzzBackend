@@ -9,8 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-
-//record ball by ball
+// record ball by ball
 func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) (*models.RecordBallResponseDetails, error) {
 	tx, err := db.KhiladiDb.Beginx()
 	if err != nil {
@@ -37,16 +36,16 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	}
 
 	// extra type
-	isWide    := req.ExtraType != nil && *req.ExtraType == "wide"
-	isNoBall  := req.ExtraType != nil && *req.ExtraType == "no_ball"
-	isBye     := req.ExtraType != nil && *req.ExtraType == "bye"
-	isLegBye  := req.ExtraType != nil && *req.ExtraType == "leg_bye"
-	isLegal   := !isWide && !isNoBall 
+	isWide := req.ExtraType != nil && *req.ExtraType == "wide"
+	isNoBall := req.ExtraType != nil && *req.ExtraType == "no_ball"
+	isBye := req.ExtraType != nil && *req.ExtraType == "bye"
+	isLegBye := req.ExtraType != nil && *req.ExtraType == "leg_bye"
+	isLegal := !isWide && !isNoBall
 
 	// Calculate innings run increment
 	inningsRuns := req.RunsScored + req.ExtrasRuns
 	if isWide || isNoBall {
-		inningsRuns++ 
+		inningsRuns++
 	}
 
 	wicketDelta := 0
@@ -117,7 +116,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	var isCompletedNow bool
 	err = tx.Get(&isCompletedNow, `SELECT EXISTS(SELECT 1 FROM innings WHERE id = $1 AND status = 'completed')`, inningsID)
 	if err == nil && !isCompletedNow {
-		strikerArg, nonStrikerArg, bowlerArg = resolveNextActivePlayers(tx, inningsID, req)
+		strikerArg, nonStrikerArg, bowlerArg = resolveNextActivePlayers(tx, matchID, currentInnings.BattingTeamID, currentInnings.TotalWickets, inningsID, req)
 	}
 
 	_, err = tx.Exec(`
@@ -170,9 +169,11 @@ func InsertBallTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest) e
 	return err
 }
 
-
 func resolveNextActivePlayers(
 	tx *sqlx.Tx,
+	matchID string,
+	battingTeamID string,
+	totalWickets int,
 	inningsID string,
 	req models.RecordBallRequest,
 ) (strikerArg, nonStrikerArg, bowlerArg *string) {
@@ -187,6 +188,29 @@ func resolveNextActivePlayers(
 		if *req.DismissedPlayerID == req.StrikerID {
 			nextStrikerID = nil
 		} else if req.NonStrikerID != nil && *req.DismissedPlayerID == *req.NonStrikerID {
+			nextNonStrikerID = nil
+		}
+	}
+
+	// check solo player
+	var teamSize int
+	err := tx.Get(&teamSize, `
+		SELECT COUNT(DISTINCT player_id) 
+		FROM (
+			SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			UNION
+			SELECT common_player_id AS player_id FROM matches WHERE id = $1 AND common_player_id IS NOT NULL
+		) all_players`, matchID, battingTeamID)
+	if err == nil && teamSize > 0 {
+		isLastPLayer := totalWickets >= teamSize-1
+		if isLastPLayer {
+			var remainingPlayerID *string
+			if nextStrikerID != nil && *nextStrikerID != "" {
+				remainingPlayerID = nextStrikerID
+			} else if nextNonStrikerID != nil && *nextNonStrikerID != "" {
+				remainingPlayerID = nextNonStrikerID
+			}
+			nextStrikerID = remainingPlayerID
 			nextNonStrikerID = nil
 		}
 	}
@@ -212,7 +236,7 @@ func resolveNextActivePlayers(
 		if nextStrikerID != nil && nextNonStrikerID != nil {
 			nextStrikerID, nextNonStrikerID = nextNonStrikerID, nextStrikerID
 		}
-		nextBowlerID = nil 
+		nextBowlerID = nil
 	}
 
 	if nextStrikerID != nil && *nextStrikerID != "" {
@@ -226,7 +250,6 @@ func resolveNextActivePlayers(
 	}
 	return
 }
-
 
 func fetchNextPlayerStats(tx *sqlx.Tx, matchID string, playerArg *string) *models.PlayerStatsSummary {
 	if playerArg == nil || *playerArg == "" {
@@ -244,7 +267,7 @@ func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req m
 	if matchStatus == "completed" {
 		return fmt.Errorf("validation error: cannot record ball, match is already completed")
 	}
-	
+
 	// Validate that the striker and non-striker if they are out or not
 	var strikerDismissed bool
 	err := tx.Get(&strikerDismissed, `
@@ -270,7 +293,7 @@ func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req m
 		}
 	}
 
-	// Check if the previous ball was a no-ball 
+	// Check if the previous ball was a no-ball
 	var prevExtraType *string
 	err = tx.Get(&prevExtraType, `
 		SELECT extra_type FROM balls 
@@ -278,7 +301,7 @@ func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req m
 		ORDER BY over_number DESC, ball_number DESC, created_at DESC 
 		LIMIT 1
 	`, inningsID)
-	
+
 	isFreeHit := err == nil && prevExtraType != nil && *prevExtraType == "no_ball"
 	isCurrentNoBall := req.ExtraType != nil && *req.ExtraType == "no_ball"
 

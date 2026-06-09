@@ -528,6 +528,43 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 	return tx.Commit()
 }
 
+
+
+func RetireHurtPlayer(inningsID string, matchID string, playerID string) error {
+	tx, err := db.KhiladiDb.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+
+	_, err = tx.Exec(`
+		UPDATE player_match_stats
+		SET is_not_out     = TRUE,
+		    dismissal_type = 'retired_hurt',
+		    updated_at     = NOW()
+		WHERE match_id = $1
+		  AND player_id = $2`,
+		matchID, playerID)
+	if err != nil {
+		return fmt.Errorf("retire hurt: failed to update player stats: %w", err)
+	}
+
+	// Remove this retire hurt player  from strike or non strike
+	_, err = tx.Exec(`
+		UPDATE innings SET
+			active_striker_id     = CASE WHEN active_striker_id     = $1::uuid THEN NULL ELSE active_striker_id     END,
+			active_non_striker_id = CASE WHEN active_non_striker_id = $1::uuid THEN NULL ELSE active_non_striker_id END,
+			updated_at            = NOW()
+		WHERE id = $2`,
+		playerID, inningsID)
+	if err != nil {
+		return fmt.Errorf("retire hurt change failed %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // inning refinement after inning completion and checks
 func CheckAndUpdateInningsMatchCompletion(
 	tx *sqlx.Tx,
@@ -590,7 +627,7 @@ func CheckAndUpdateInningsMatchCompletion(
 	}
 
 	if isInningsComplete {
-		// Finalize surviving batsmen
+		// Finalize surviving batsmen (only those with no dismissal recorded)
 		_, _ = tx.Exec(`
 			UPDATE player_match_stats 
 			SET is_not_out = TRUE 
@@ -605,6 +642,17 @@ func CheckAndUpdateInningsMatchCompletion(
 			AND player_id IN (
 				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
 			)`, matchID, battingTeamID, inningsID)
+
+		_, _ = tx.Exec(`
+			UPDATE player_match_stats
+			SET dismissal_type = 'retired_out',
+			    is_not_out     = FALSE,
+			    updated_at     = NOW()
+			WHERE match_id = $1
+			AND dismissal_type = 'retired_hurt'
+			AND player_id IN (
+				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
+			)`, matchID, battingTeamID)
 
 		// Close innings
 		_, _ = tx.Exec(`
