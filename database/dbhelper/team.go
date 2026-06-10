@@ -5,6 +5,7 @@ import (
 	"fmt"
 	db "khiladiBuzz/database"
 	"khiladiBuzz/models"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -188,6 +189,16 @@ func CreateTeamWithPlayers(
 		}
 	}
 
+	// Validate that any existing phone no.
+	for _, p := range req.Players {
+		existing, exists := playerMap[p.PhoneNumber]
+		if exists {
+			if !strings.EqualFold(p.PlayerName, existing.PlayerName) {
+				return "", fmt.Errorf("phone number %s is already registered to player %s", p.PhoneNumber, existing.PlayerName)
+			}
+		}
+	}
+
 
 	missingPlayers := []models.CreatePlayerRequest{}
 
@@ -357,7 +368,12 @@ func FindOrCreatePlayerForTeam(
 	`
 	err := db.KhiladiDb.Get(&player, query, phone)
 
-	if err != nil {
+	if err == nil {
+		// Phone number exists, check if name matches
+		if !strings.EqualFold(name, player.PlayerName) {
+			return models.Player{}, fmt.Errorf("phone number %s is already registered to player %s", phone, player.PlayerName)
+		}
+	} else {
 		player, err = CreateUser(name, phone, "")
 		if err != nil {
 			return models.Player{}, err

@@ -28,8 +28,8 @@ func CreateTeam(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to create team",
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
 		})
 		return
 	}
@@ -84,7 +84,7 @@ func AddPlayerToTeam(c *gin.Context) {
 
 	player, err := dbhelper.FindOrCreatePlayerForTeam(req.PlayerName, req.PhoneNumber, req.Role, teamID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add player to team"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

@@ -311,5 +311,13 @@ func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req m
 			return fmt.Errorf("validation error: on a no-ball or free hit, a batsman can only be out by run out or retired out")
 		}
 	}
+
+	isCurrentWide := req.ExtraType != nil && *req.ExtraType == "wide"
+	if isCurrentWide && req.IsWicket && req.DismissalType != nil {
+		dtype := strings.ToLower(*req.DismissalType)
+		if dtype != "runout" && dtype != "stumped" && dtype != "hit_wicket" && dtype != "retired_out" {
+			return fmt.Errorf("validation error: on a wide ball, a batsman can only be dismissed by run out, stumped, hit wicket, or retired out")
+		}
+	}
 	return nil
 }
