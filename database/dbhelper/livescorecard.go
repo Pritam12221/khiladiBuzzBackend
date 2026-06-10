@@ -80,8 +80,8 @@ func populateInningsData(match *matchRow, inn inningsRow) (models.InningsData, e
 
 	// summary table 
 	if match.Status == "completed" {
-		innData.TopBatsmen, _ = FetchTopBatsmenSummary(match.ID, inn.BattingTeamID)
-		innData.TopBowlers, _ = FetchTopBowlersSummary(match.ID, inn.BowlingTeamID)
+		innData.TopBatsmen, _ = FetchTopBatsmenSummary(inn.ID, inn.BattingTeamID)
+		innData.TopBowlers, _ = FetchTopBowlersSummary(inn.ID, inn.BowlingTeamID)
 	}
 
 	// to handle solo player
@@ -252,7 +252,7 @@ func FetchInningsBalls(inningsID string) ([]models.BallRow, error) {
 	return balls, err
 }
 
-// FetchBattingStats fetches raw batting match stats for all squad players
+// FetchBattingStats fetches raw batting match stats for all squad players in a specific innings
 func FetchBattingStats(matchID, inningsID, battingTeamID string) ([]models.BatStat, error) {
 	var batStats []models.BatStat
 	query := `
@@ -269,19 +269,19 @@ func FetchBattingStats(matchID, inningsID, battingTeamID string) ([]models.BatSt
 			u_field.name as fielder_name
 		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
-		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.match_id = $1
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $3
+		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.innings_id = $2
 		LEFT JOIN player_stats pb ON pms.dismissed_by = pb.id
 		LEFT JOIN users u_bowl ON pb.user_id = u_bowl.id
 		LEFT JOIN player_stats pf ON pms.fielder_id = pf.id
 		LEFT JOIN users u_field ON pf.user_id = u_field.id
-		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		WHERE (mp.match_id = $1 AND mp.team_id = $3)
 		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))`
-	err := db.KhiladiDb.Select(&batStats, query, matchID, battingTeamID)
+	err := db.KhiladiDb.Select(&batStats, query, matchID, inningsID, battingTeamID)
 	return batStats, err
 }
 
-// FetchBowlingStats fetches raw bowling match stats for all squad players
+// FetchBowlingStats fetches raw bowling match stats for all squad players in a specific innings
 func FetchBowlingStats(matchID, inningsID, bowlingTeamID string) ([]models.BowlStat, error) {
 	var bowlStats []models.BowlStat
 	query := `
@@ -293,11 +293,11 @@ func FetchBowlingStats(matchID, inningsID, bowlingTeamID string) ([]models.BowlS
 			COALESCE(pms.wickets_taken, 0) as wickets_taken
 		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
-		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $2
-		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.match_id = $1
-		WHERE (mp.match_id = $1 AND mp.team_id = $2)
+		LEFT JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = $1 AND mp.team_id = $3
+		LEFT JOIN player_match_stats pms ON pms.player_id = p.id AND pms.innings_id = $2
+		WHERE (mp.match_id = $1 AND mp.team_id = $3)
 		   OR (p.id = (SELECT common_player_id FROM matches WHERE id = $1))`
-	err := db.KhiladiDb.Select(&bowlStats, query, matchID, bowlingTeamID)
+	err := db.KhiladiDb.Select(&bowlStats, query, matchID, inningsID, bowlingTeamID)
 	return bowlStats, err
 }
 
@@ -342,19 +342,20 @@ func FetchYetToBat(matchID, battingTeamID string, seenBatsmen map[string]bool) (
 }
 
 // FetchTopBatsmenSummary returns the top 2 batsmen directly sorted by runs scored
-func FetchTopBatsmenSummary(matchID, battingTeamID string) ([]models.TopBatsman, error) {
+func FetchTopBatsmenSummary(inningsID, battingTeamID string) ([]models.TopBatsman, error) {
 	var rows []models.TopBatsmanRow
 	query := `
 		SELECT u.name as player_name, pms.runs_scored, pms.balls_faced
 		FROM player_match_stats pms
 		JOIN player_stats p ON pms.player_id = p.id
 		JOIN users u ON p.user_id = u.id
-		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = pms.match_id
-		WHERE pms.match_id = $1 AND mp.team_id = $2
+		JOIN innings i ON pms.innings_id = i.id
+		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = i.match_id
+		WHERE pms.innings_id = $1 AND mp.team_id = $2
 		  AND (pms.runs_scored > 0 OR pms.balls_faced > 0)
 		ORDER BY pms.runs_scored DESC, pms.balls_faced ASC
 		LIMIT 2`
-	err := db.KhiladiDb.Select(&rows, query, matchID, battingTeamID)
+	err := db.KhiladiDb.Select(&rows, query, inningsID, battingTeamID)
 	if err != nil {
 		return nil, err
 	}
@@ -367,19 +368,20 @@ func FetchTopBatsmenSummary(matchID, battingTeamID string) ([]models.TopBatsman,
 }
 
 // FetchTopBowlersSummary returns the top 2 bowlers directly sorted by wickets taken
-func FetchTopBowlersSummary(matchID, bowlingTeamID string) ([]models.TopBowler, error) {
+func FetchTopBowlersSummary(inningsID, bowlingTeamID string) ([]models.TopBowler, error) {
 	var rows []models.TopBowlerRow
 	query := `
 		SELECT u.name as player_name, pms.wickets_taken, pms.runs_given, pms.overs_bowled
 		FROM player_match_stats pms
 		JOIN player_stats p ON pms.player_id = p.id
 		JOIN users u ON p.user_id = u.id
-		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = pms.match_id
-		WHERE pms.match_id = $1 AND mp.team_id = $2
+		JOIN innings i ON pms.innings_id = i.id
+		JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = i.match_id
+		WHERE pms.innings_id = $1 AND mp.team_id = $2
 		  AND pms.overs_bowled > 0
 		ORDER BY pms.wickets_taken DESC, pms.runs_given ASC
 		LIMIT 2`
-	err := db.KhiladiDb.Select(&rows, query, matchID, bowlingTeamID)
+	err := db.KhiladiDb.Select(&rows, query, inningsID, bowlingTeamID)
 	if err != nil {
 		return nil, err
 	}

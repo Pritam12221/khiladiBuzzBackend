@@ -74,24 +74,24 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 
 	// Update non-striker stats if active
 	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
-		if err = UpdateNonStrikerStatsTx(tx, matchID, *req.NonStrikerID); err != nil {
+		if err = UpdateNonStrikerStatsTx(tx, inningsID, *req.NonStrikerID); err != nil {
 			return nil, fmt.Errorf("failed to update non-striker stats: %w", err)
 		}
 	}
 
 	// Update striker batting stats (passing isLegal)
-	if err = UpdateStrikerStatsTx(tx, matchID, req.StrikerID, req.RunsScored, isLegal, isBye, isLegBye); err != nil {
+	if err = UpdateStrikerStatsTx(tx, inningsID, req.StrikerID, req.RunsScored, isLegal, isBye, isLegBye); err != nil {
 		return nil, fmt.Errorf("failed to update striker stats: %w", err)
 	}
 
 	// Update bowler bowling stats
-	if err = UpdateBowlerStatsTx(tx, matchID, req, isLegal, isWide, isNoBall, isBye, isLegBye); err != nil {
+	if err = UpdateBowlerStatsTx(tx, inningsID, req, isLegal, isWide, isNoBall, isBye, isLegBye); err != nil {
 		return nil, fmt.Errorf("failed to update bowler stats: %w", err)
 	}
 
 	//  Update dismissed player stats if a wicket fell
 	if req.IsWicket && req.DismissedPlayerID != nil {
-		if err = UpdateDismissedPlayerStatsTx(tx, matchID, req); err != nil {
+		if err = UpdateDismissedPlayerStatsTx(tx, inningsID, req); err != nil {
 			return nil, fmt.Errorf("failed to update dismissed player stats: %w", err)
 		}
 	}
@@ -132,9 +132,9 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	}
 
 	result := models.RecordBallResponseDetails{
-		Striker:          fetchNextPlayerStats(tx, matchID, strikerArg),
-		NonStriker:       fetchNextPlayerStats(tx, matchID, nonStrikerArg),
-		Bowler:           fetchNextPlayerStats(tx, matchID, bowlerArg),
+		Striker:          fetchNextPlayerStatsTx(tx, inningsID, strikerArg),
+		NonStriker:       fetchNextPlayerStatsTx(tx, inningsID, nonStrikerArg),
+		Bowler:           fetchNextPlayerStatsTx(tx, inningsID, bowlerArg),
 		NextStrikerID:    strikerArg,
 		NextNonStrikerID: nonStrikerArg,
 		NextBowlerID:     bowlerArg,
@@ -251,13 +251,13 @@ func resolveNextActivePlayers(
 	return
 }
 
-func fetchNextPlayerStats(tx *sqlx.Tx, matchID string, playerArg *string) *models.PlayerStatsSummary {
+func fetchNextPlayerStatsTx(tx *sqlx.Tx, inningsID string, playerArg *string) *models.PlayerStatsSummary {
 	if playerArg == nil || *playerArg == "" {
 		return nil
 	}
-	stats, err := FetchPlayerMatchStatsSummaryTx(tx, matchID, *playerArg)
+	stats, err := FetchPlayerMatchStatsSummaryTx(tx, inningsID, *playerArg)
 	if err != nil {
-		return nil
+		return &models.PlayerStatsSummary{PlayerID: *playerArg}
 	}
 	return stats
 }

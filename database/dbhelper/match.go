@@ -107,15 +107,15 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 
 	if req.StrikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id) 
-			VALUES ($1, $2) 
-			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, req.StrikerID)
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, req.StrikerID)
 	}
 	if req.NonStrikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id) 
-			VALUES ($1, $2) 
-			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, req.NonStrikerID)
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, req.NonStrikerID)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -168,7 +168,7 @@ func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerI
 
 
 func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, error) {
-	var matches []models.MatchListItem
+	matches := []models.MatchListItem{}
 	query := `
 		SELECT 
 			m.id, 
@@ -182,6 +182,7 @@ func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, er
 			m.toss_winner_team_id, 
 			m.toss_decision,
 			m.winner_team_id,
+			m.host_id,
 			i1.total_runs as innings1_runs,
 			i1.total_wickets as innings1_wickets,
 			i1.total_overs as innings1_overs,
@@ -203,4 +204,5 @@ func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, er
 	}
 	return matches, nil
 }
+
 

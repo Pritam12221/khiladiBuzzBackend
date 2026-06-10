@@ -143,7 +143,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 					SUM(runs_scored) as total_runs,
 					SUM(balls_faced) as total_balls_faced,
 					SUM(fours) as total_fours,
-					SUM(sixes) as total_sixes
+					SUM(sixes) as total_sixes,
+					COALESCE(MAX(CASE WHEN is_not_out THEN 1 ELSE 0 END), 0) = 1 as is_not_out
 				FROM player_match_stats
 				WHERE match_id = $1
 				GROUP BY player_id
@@ -162,7 +163,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 				SELECT 
 					player_id,
 					SUM(runs_given) as total_runs_given,
-					SUM(wickets_taken) as total_wickets
+					SUM(wickets_taken) as total_wickets,
+					SUM(maiden_overs) as total_maidens
 				FROM player_match_stats
 				WHERE match_id = $1
 				GROUP BY player_id
@@ -180,6 +182,20 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 				career_runs_given = ps.career_runs_given - COALESCE(mbs.total_runs_given, 0),
 				career_wickets = ps.career_wickets - COALESCE(mbs.total_wickets, 0),
 				career_balls_bowled = ps.career_balls_bowled - COALESCE(mbol.total_balls_bowled, 0),
+				career_ducks = ps.career_ducks - CASE WHEN mb.total_runs = 0 AND NOT mb.is_not_out AND mb.total_balls_faced > 0 THEN 1 ELSE 0 END,
+				career_fifties = ps.career_fifties - CASE WHEN mb.total_runs >= 50 AND mb.total_runs < 100 THEN 1 ELSE 0 END,
+				career_hundreds = ps.career_hundreds - CASE WHEN mb.total_runs >= 100 THEN 1 ELSE 0 END,
+				career_highest_score = COALESCE((
+					SELECT MAX(runs_scored) 
+					FROM player_match_stats 
+					WHERE player_id = ps.id AND match_id != $1
+				), 0),
+				career_maidens = ps.career_maidens - COALESCE(mbs.total_maidens, 0),
+				career_highest_wickets = COALESCE((
+					SELECT MAX(wickets_taken) 
+					FROM player_match_stats 
+					WHERE player_id = ps.id AND match_id != $1
+				), 0),
 				updated_at = NOW()
 			FROM (
 				SELECT DISTINCT player_id FROM match_players WHERE match_id = $1
@@ -223,8 +239,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 			fours       = COALESCE(fours, 0) - $3,
 			sixes       = COALESCE(sixes, 0) - $4,
 			updated_at  = NOW()
-		WHERE match_id = $5 AND player_id = $6`,
-		runsForBatsman, ballsFacedDec, foursDec, sixesDec, innings.MatchID, lastBall.StrikerID,
+		WHERE innings_id = $5 AND player_id = $6`,
+		runsForBatsman, ballsFacedDec, foursDec, sixesDec, inningsID, lastBall.StrikerID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to revert striker match stats: %w", err)
@@ -245,8 +261,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 
 	var currentBowlerOvers float64
 	err = tx.Get(&currentBowlerOvers, `
-		SELECT COALESCE(overs_bowled, 0) FROM player_match_stats WHERE match_id = $1 AND player_id = $2`,
-		innings.MatchID, lastBall.BowlerID)
+		SELECT COALESCE(overs_bowled, 0) FROM player_match_stats WHERE innings_id = $1 AND player_id = $2`,
+		inningsID, lastBall.BowlerID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to fetch bowler match overs: %w", err)
 	}
@@ -271,8 +287,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 			wickets_taken = COALESCE(wickets_taken, 0) - $2,
 			overs_bowled  = $3,
 			updated_at    = NOW()
-		WHERE match_id = $4 AND player_id = $5`,
-		bowlerRuns, bowlerWicketDec, newBowlerOvers, innings.MatchID, lastBall.BowlerID,
+		WHERE innings_id = $4 AND player_id = $5`,
+		bowlerRuns, bowlerWicketDec, newBowlerOvers, inningsID, lastBall.BowlerID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to revert bowler match stats: %w", err)
@@ -287,8 +303,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 				dismissed_by   = NULL,
 				fielder_id     = NULL,
 				updated_at     = NOW()
-			WHERE match_id = $1 AND player_id = $2`,
-			innings.MatchID, *lastBall.DismissedPlayerID,
+			WHERE innings_id = $1 AND player_id = $2`,
+			inningsID, *lastBall.DismissedPlayerID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revert dismissed player match stats: %w", err)

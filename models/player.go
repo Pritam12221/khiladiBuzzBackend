@@ -23,6 +23,12 @@ type Player struct {
 	CareerBallsBowled int `db:"career_balls_bowled" json:"career_balls_bowled"`
 	CareerRunsGiven   int `db:"career_runs_given" json:"career_runs_given"`
 	CareerWins        int `db:"career_wins" json:"career_wins"`
+	CareerDucks              int  `db:"career_ducks" json:"career_ducks"`
+	CareerFifties            int  `db:"career_fifties" json:"career_fifties"`
+	CareerHundreds           int  `db:"career_hundreds" json:"career_hundreds"`
+	CareerHighestScore       int  `db:"career_highest_score" json:"career_highest_score"`
+	CareerMaidens            int  `db:"career_maidens" json:"career_maidens"`
+	CareerHighestWickets     int  `db:"career_highest_wickets" json:"career_highest_wickets"`
 }
 
 type UpdateProfileRequest struct {

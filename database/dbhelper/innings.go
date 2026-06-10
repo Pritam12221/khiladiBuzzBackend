@@ -44,18 +44,18 @@ func UpdateInningsStatsTx(tx *sqlx.Tx, inningsID string, runsInc, wicketsInc int
 }
 
 // UpdateNonStrikerStatsTx ensures the non-striker player has a player_match_stats row and is marked as not out.
-func UpdateNonStrikerStatsTx(tx *sqlx.Tx, matchID string, nonStrikerID string) error {
+func UpdateNonStrikerStatsTx(tx *sqlx.Tx, inningsID string, nonStrikerID string) error {
 	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, player_id)
-VALUES ($1, $2)
-ON CONFLICT (match_id, player_id) DO NOTHING`,
-		matchID, nonStrikerID,
+		INSERT INTO player_match_stats (match_id, innings_id, player_id)
+		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2)
+		ON CONFLICT (innings_id, player_id) DO NOTHING`,
+		inningsID, nonStrikerID,
 	)
 	return err
 }
 
 // UpdateStrikerStatsTx updates the active striker's batting statistics in the player_match_stats table.
-func UpdateStrikerStatsTx(tx *sqlx.Tx, matchID string, strikerID string, runsScored int, isBallFaced, isBye, isLegBye bool) error {
+func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsScored int, isBallFaced, isBye, isLegBye bool) error {
 	runsForBatsman := runsScored
 	if isBye || isLegBye {
 		runsForBatsman = 0
@@ -74,21 +74,21 @@ func UpdateStrikerStatsTx(tx *sqlx.Tx, matchID string, strikerID string, runsSco
 	}
 
 	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, player_id, runs_scored, balls_faced, fours, sixes)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (match_id, player_id) DO UPDATE SET
+		INSERT INTO player_match_stats (match_id, innings_id, player_id, runs_scored, balls_faced, fours, sixes)
+		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, $3, $4, $5, $6)
+		ON CONFLICT (innings_id, player_id) DO UPDATE SET
 			runs_scored = player_match_stats.runs_scored + EXCLUDED.runs_scored,
 			balls_faced = player_match_stats.balls_faced + EXCLUDED.balls_faced,
 			fours       = player_match_stats.fours       + EXCLUDED.fours,
 			sixes       = player_match_stats.sixes       + EXCLUDED.sixes,
 			updated_at  = NOW()`,
-		matchID, strikerID, runsForBatsman, ballsFacedInc, foursInc, sixesInc,
+		inningsID, strikerID, runsForBatsman, ballsFacedInc, foursInc, sixesInc,
 	)
 	return err
 }
 
-// UpdateBowlerStats
-func UpdateBowlerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallRequest, isLegal, isWide, isNoBall, isBye, isLegBye bool) error {
+// UpdateBowlerStatsTx updates the bowler's bowling statistics in the player_match_stats table.
+func UpdateBowlerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest, isLegal, isWide, isNoBall, isBye, isLegBye bool) error {
 	bowlerRuns := 0
 	if !isBye && !isLegBye {
 		bowlerRuns = req.RunsScored + req.ExtrasRuns
@@ -105,8 +105,8 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallReque
 	//Fetch current overs count
 	var currentOvers float64
 	err := tx.Get(&currentOvers, `
-		SELECT COALESCE((SELECT overs_bowled FROM player_match_stats WHERE match_id = $1 AND player_id = $2), 0)`,
-		matchID, req.BowlerID)
+		SELECT COALESCE((SELECT overs_bowled FROM player_match_stats WHERE innings_id = $1 AND player_id = $2), 0)`,
+		inningsID, req.BowlerID)
 	if err != nil {
 		return err
 	}
@@ -123,22 +123,21 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallReque
 		newOvers = currentOvers
 	}
 
-	
 	query := `
-		INSERT INTO player_match_stats (match_id, player_id, runs_given, wickets_taken, maiden_overs, overs_bowled)
-		VALUES ($1, $2, $3, $4, 0, $5)
-		ON CONFLICT (match_id, player_id) DO UPDATE SET
+		INSERT INTO player_match_stats (match_id, innings_id, player_id, runs_given, wickets_taken, maiden_overs, overs_bowled)
+		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, $3, $4, 0, $5)
+		ON CONFLICT (innings_id, player_id) DO UPDATE SET
 			runs_given    = player_match_stats.runs_given    + EXCLUDED.runs_given,
 			wickets_taken = player_match_stats.wickets_taken + EXCLUDED.wickets_taken,
 			overs_bowled  = $5,
 			updated_at    = NOW()`
 
-	_, err = tx.Exec(query, matchID, req.BowlerID, bowlerRuns, bowlerWickets, newOvers)
+	_, err = tx.Exec(query, inningsID, req.BowlerID, bowlerRuns, bowlerWickets, newOvers)
 	return err
 }
 
-// UpdateDismissedPlayerStats
-func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, matchID string, req models.RecordBallRequest) error {
+// UpdateDismissedPlayerStatsTx updates the dismissed player's match stats.
+func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest) error {
 	if req.DismissedPlayerID == nil {
 		return nil
 	}
@@ -154,27 +153,27 @@ func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, matchID string, req models.Record
 	}
 
 	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, player_id, is_not_out, dismissal_type, dismissed_by, fielder_id)
-		VALUES ($1, $2, FALSE, $3::dismissal_type_enum, $4, $5)
-		ON CONFLICT (match_id, player_id) DO UPDATE SET
+		INSERT INTO player_match_stats (match_id, innings_id, player_id, is_not_out, dismissal_type, dismissed_by, fielder_id)
+		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, FALSE, $3::dismissal_type_enum, $4, $5)
+		ON CONFLICT (innings_id, player_id) DO UPDATE SET
 			is_not_out     = FALSE,
 			dismissal_type = EXCLUDED.dismissal_type,
 			dismissed_by   = EXCLUDED.dismissed_by,
 			fielder_id     = EXCLUDED.fielder_id,
 			updated_at     = NOW()`,
-		matchID, *req.DismissedPlayerID, req.DismissalType, bowlerIDVal, fielderIDVal,
+		inningsID, *req.DismissedPlayerID, req.DismissalType, bowlerIDVal, fielderIDVal,
 	)
 	return err
 }
 
-// FetchPlayerMatchStatsSummary
-func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, matchID string, playerID string) (*models.PlayerStatsSummary, error) {
+// FetchPlayerMatchStatsSummaryTx fetches statistics filtered by inningsID.
+func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, inningsID string, playerID string) (*models.PlayerStatsSummary, error) {
 	var stats models.PlayerStatsSummary
 	err := tx.Get(&stats, `
 		SELECT player_id, runs_scored, balls_faced, fours, sixes, COALESCE(is_not_out, FALSE) as is_not_out, dismissal_type, dismissed_by, runs_given, wickets_taken, overs_bowled
 		FROM player_match_stats
-		WHERE match_id = $1 AND player_id = $2`,
-		matchID, playerID,
+		WHERE innings_id = $1 AND player_id = $2`,
+		inningsID, playerID,
 	)
 	if err != nil {
 		return nil, err
@@ -303,13 +302,13 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		err := db.KhiladiDb.Get(&stats, `
 			SELECT player_id, runs_scored, balls_faced, fours, sixes, COALESCE(is_not_out, FALSE) as is_not_out, dismissal_type, dismissed_by, runs_given, wickets_taken, overs_bowled
 			FROM player_match_stats
-			WHERE match_id = $1 AND player_id = $2`,
-			innings.MatchID, *innings.ActiveStrikerID,
+			WHERE innings_id = $1 AND player_id = $2`,
+			inningsID, *innings.ActiveStrikerID,
 		)
 		if err == nil {
 			strikerStats = &stats
 		} else {
-			strikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveStrikerID}
+			strikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveStrikerID, IsNotOut: true}
 		}
 	}
 	if innings.ActiveNonStrikerID != nil && *innings.ActiveNonStrikerID != "" {
@@ -317,13 +316,13 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		err := db.KhiladiDb.Get(&stats, `
 			SELECT player_id, runs_scored, balls_faced, fours, sixes, COALESCE(is_not_out, FALSE) as is_not_out, dismissal_type, dismissed_by, runs_given, wickets_taken, overs_bowled
 			FROM player_match_stats
-			WHERE match_id = $1 AND player_id = $2`,
-			innings.MatchID, *innings.ActiveNonStrikerID,
+			WHERE innings_id = $1 AND player_id = $2`,
+			inningsID, *innings.ActiveNonStrikerID,
 		)
 		if err == nil {
 			nonStrikerStats = &stats
 		} else {
-			nonStrikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveNonStrikerID}
+			nonStrikerStats = &models.PlayerStatsSummary{PlayerID: *innings.ActiveNonStrikerID, IsNotOut: true}
 		}
 	}
 
@@ -440,22 +439,22 @@ func CreateInnings(matchID string, inningsNumber int, battingTeamID, bowlingTeam
 	// check for active striker non striker and bowler 
 	if strikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id) 
-			VALUES ($1, $2) 
-			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, strikerID)
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, strikerID)
 	}
 	if nonStrikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id) 
-			VALUES ($1, $2) 
-			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, nonStrikerID)
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, nonStrikerID)
 	}
 
 	if bowlerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id) 
-			VALUES ($1, $2) 
-			ON CONFLICT (match_id, player_id) DO NOTHING`, matchID, bowlerID)
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, bowlerID)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -500,28 +499,28 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 
 	if strikerID != nil && *strikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id)
-			VALUES ($1, $2)
-			ON CONFLICT (match_id, player_id) DO NOTHING`,
-			matchID, *strikerID,
+			INSERT INTO player_match_stats (match_id, innings_id, player_id)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (innings_id, player_id) DO NOTHING`,
+			matchID, inningsID, *strikerID,
 		)
 	}
 
 	if nonStrikerID != nil && *nonStrikerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id)
-			VALUES ($1, $2)
-			ON CONFLICT (match_id, player_id) DO NOTHING`,
-			matchID, *nonStrikerID,
+			INSERT INTO player_match_stats (match_id, innings_id, player_id)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (innings_id, player_id) DO NOTHING`,
+			matchID, inningsID, *nonStrikerID,
 		)
 	}
 
 	if bowlerID != nil && *bowlerID != "" {
 		_, _ = tx.Exec(`
-			INSERT INTO player_match_stats (match_id, player_id)
-			VALUES ($1, $2)
-			ON CONFLICT (match_id, player_id) DO NOTHING`,
-			matchID, *bowlerID,
+			INSERT INTO player_match_stats (match_id, innings_id, player_id)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (innings_id, player_id) DO NOTHING`,
+			matchID, inningsID, *bowlerID,
 		)
 	}
 
@@ -543,9 +542,9 @@ func RetireHurtPlayer(inningsID string, matchID string, playerID string) error {
 		SET is_not_out     = TRUE,
 		    dismissal_type = 'retired_hurt',
 		    updated_at     = NOW()
-		WHERE match_id = $1
+		WHERE innings_id = $1
 		  AND player_id = $2`,
-		matchID, playerID)
+		inningsID, playerID)
 	if err != nil {
 		return fmt.Errorf("retire hurt: failed to update player stats: %w", err)
 	}
@@ -680,7 +679,8 @@ func CheckAndUpdateInningsMatchCompletion(
 					SUM(runs_scored) as total_runs,
 					SUM(balls_faced) as total_balls_faced,
 					SUM(fours) as total_fours,
-					SUM(sixes) as total_sixes
+					SUM(sixes) as total_sixes,
+					COALESCE(MAX(CASE WHEN is_not_out THEN 1 ELSE 0 END), 0) = 1 as is_not_out
 				FROM player_match_stats
 				WHERE match_id = $1
 				GROUP BY player_id
@@ -699,7 +699,8 @@ func CheckAndUpdateInningsMatchCompletion(
 				SELECT 
 					player_id,
 					SUM(runs_given) as total_runs_given,
-					SUM(wickets_taken) as total_wickets
+					SUM(wickets_taken) as total_wickets,
+					SUM(maiden_overs) as total_maidens
 				FROM player_match_stats
 				WHERE match_id = $1
 				GROUP BY player_id
@@ -717,6 +718,12 @@ func CheckAndUpdateInningsMatchCompletion(
 				career_runs_given = ps.career_runs_given + COALESCE(mbs.total_runs_given, 0),
 				career_wickets = ps.career_wickets + COALESCE(mbs.total_wickets, 0),
 				career_balls_bowled = ps.career_balls_bowled + COALESCE(mbol.total_balls_bowled, 0),
+				career_ducks = ps.career_ducks + CASE WHEN mb.total_runs = 0 AND NOT mb.is_not_out AND mb.total_balls_faced > 0 THEN 1 ELSE 0 END,
+				career_fifties = ps.career_fifties + CASE WHEN mb.total_runs >= 50 AND mb.total_runs < 100 THEN 1 ELSE 0 END,
+				career_hundreds = ps.career_hundreds + CASE WHEN mb.total_runs >= 100 THEN 1 ELSE 0 END,
+				career_highest_score = GREATEST(ps.career_highest_score, COALESCE(mb.total_runs, 0)),
+				career_maidens = ps.career_maidens + COALESCE(mbs.total_maidens, 0),
+				career_highest_wickets = GREATEST(ps.career_highest_wickets, COALESCE(mbs.total_wickets, 0)),
 				updated_at = NOW()
 			FROM (
 				SELECT DISTINCT player_id FROM match_players WHERE match_id = $1

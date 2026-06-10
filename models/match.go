@@ -93,6 +93,7 @@ type MatchListItem struct {
 	Innings2Runs     *int     `json:"innings2_runs" db:"innings2_runs"`
 	Innings2Wickets  *int     `json:"innings2_wickets" db:"innings2_wickets"`
 	Innings2Overs    *float64 `json:"innings2_overs" db:"innings2_overs"`
+	HostID           *string  `json:"host_id" db:"host_id"`
 }
 
 type InningsPlayersDetails struct {

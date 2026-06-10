@@ -181,6 +181,7 @@ ON balls(innings_id);
 CREATE TABLE IF NOT EXISTS player_match_stats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID NOT NULL REFERENCES matches(id),
+    innings_id UUID NOT NULL REFERENCES innings(id),
     player_id UUID NOT NULL REFERENCES player_stats(id),
 
     runs_scored INT DEFAULT 0,
@@ -192,7 +193,7 @@ CREATE TABLE IF NOT EXISTS player_match_stats (
     runs_given INT DEFAULT 0,
     wickets_taken INT DEFAULT 0,
 
-    UNIQUE(match_id, player_id),
+    UNIQUE(innings_id, player_id),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

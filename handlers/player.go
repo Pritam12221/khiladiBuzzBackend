@@ -3,6 +3,7 @@ package handlers
 import (
 	"khiladiBuzz/database/dbhelper"
 	"khiladiBuzz/models"
+	"khiladiBuzz/utils"
 	"net/http"
 	"strings"
 
@@ -69,3 +70,24 @@ func SearchPlayers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"players": players})
 }
+
+func FetchAllPlayers(c *gin.Context) {
+	search := strings.TrimSpace(c.Query("search"))
+
+	var limit, offset int
+	if c.Query("page") == "" && c.Query("limit") == "" {
+		limit = 1000
+		offset = 0
+	} else {
+		limit, offset = utils.SetPagination(c)
+	}
+
+	players, err := dbhelper.GetAllPlayers(search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch all players"})
+		return
+	}
+
+	c.JSON(http.StatusOK, players)
+}
+

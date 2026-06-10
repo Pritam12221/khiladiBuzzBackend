@@ -35,6 +35,7 @@ func ServerRoutes() *gin.Engine {
 	{
 		publicRoutes.GET("/matches", handlers.FetchAllMatches)
 		publicRoutes.GET("/matches/:id/scorecard", handlers.GetMatchScorecard)
+		publicRoutes.GET("/players", handlers.FetchAllPlayers)
 	}
 
 	authRoutes:=r.Group("/v1")

@@ -10,7 +10,9 @@ func GetPlayerByUserID(userID string) (model.Player, error) {
 	query := `
 		SELECT p.id, u.name AS player_name, u.phone_number, p.user_id, p.role, p.batting_style, p.bowling_style, p.created_at, p.updated_at,
 		       p.career_matches, p.career_runs, p.career_balls_faced, p.career_fours, p.career_sixes,
-		       p.career_wickets, p.career_balls_bowled, p.career_runs_given, p.career_wins
+		       p.career_wickets, p.career_balls_bowled, p.career_runs_given, p.career_wins,
+		       p.career_ducks, p.career_fifties, p.career_hundreds, p.career_highest_score,
+		       p.career_maidens, p.career_highest_wickets
 		FROM player_stats p
 		JOIN users u ON p.user_id = u.id
 		WHERE p.user_id = $1
@@ -51,3 +53,43 @@ func UpdatePlayerProfile(userID string, name, phone, role string, batting, bowli
 	}
 	return tx.Commit()
 }
+
+func GetAllPlayers(search string, limit, offset int) ([]model.Player, error) {
+	players := []model.Player{}
+	query := `
+		SELECT
+			p.id,
+			u.name AS player_name,
+			u.phone_number,
+			p.user_id,
+			p.role,
+			p.batting_style,
+			p.bowling_style,
+			p.created_at,
+			p.updated_at,
+			p.career_matches,
+			p.career_runs,
+			p.career_balls_faced,
+			p.career_fours,
+			p.career_sixes,
+			p.career_wickets,
+			p.career_balls_bowled,
+			p.career_runs_given,
+			p.career_wins,
+			p.career_ducks,
+			p.career_fifties,
+			p.career_hundreds,
+			p.career_highest_score,
+			p.career_maidens,
+			p.career_highest_wickets
+		FROM player_stats p
+		JOIN users u ON p.user_id = u.id
+		WHERE u.archived_at IS NULL
+		  AND ($1 = '' OR u.name ILIKE '%' || $1 || '%')
+		ORDER BY p.career_runs DESC
+		LIMIT $2 OFFSET $3
+	`
+	err := db.KhiladiDb.Select(&players, query, search, limit, offset)
+	return players, err
+}
+
