@@ -166,7 +166,7 @@ func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, inningsID string, req models.Reco
 	return err
 }
 
-// FetchPlayerMatchStatsSummaryTx fetches statistics filtered by inningsID.
+// FetchPlayerMatchStatsSummaryTx fetches statistics filtered by inningsID
 func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, inningsID string, playerID string) (*models.PlayerStatsSummary, error) {
 	var stats models.PlayerStatsSummary
 	err := tx.Get(&stats, `
@@ -529,40 +529,7 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 
 
 
-func RetireHurtPlayer(inningsID string, matchID string, playerID string) error {
-	tx, err := db.KhiladiDb.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 
-
-	_, err = tx.Exec(`
-		UPDATE player_match_stats
-		SET is_not_out     = TRUE,
-		    dismissal_type = 'retired_hurt',
-		    updated_at     = NOW()
-		WHERE innings_id = $1
-		  AND player_id = $2`,
-		inningsID, playerID)
-	if err != nil {
-		return fmt.Errorf("retire hurt: failed to update player stats: %w", err)
-	}
-
-	// Remove this retire hurt player  from strike or non strike
-	_, err = tx.Exec(`
-		UPDATE innings SET
-			active_striker_id     = CASE WHEN active_striker_id     = $1::uuid THEN NULL ELSE active_striker_id     END,
-			active_non_striker_id = CASE WHEN active_non_striker_id = $1::uuid THEN NULL ELSE active_non_striker_id END,
-			updated_at            = NOW()
-		WHERE id = $2`,
-		playerID, inningsID)
-	if err != nil {
-		return fmt.Errorf("retire hurt change failed %w", err)
-	}
-
-	return tx.Commit()
-}
 
 // inning refinement after inning completion and checks
 func CheckAndUpdateInningsMatchCompletion(
@@ -601,11 +568,12 @@ func CheckAndUpdateInningsMatchCompletion(
 	isMatchComplete := false
 	var winnerTeamID *string
 
-	if inningsNumber == 1 {
+	switch inningsNumber {
+	case 1:
 		if isOversFinished || isAllOut {
 			isInningsComplete = true
 		}
-	} else if inningsNumber == 2 {
+	case 2:
 		var innings1Runs int
 		err = tx.Get(&innings1Runs, `SELECT total_runs FROM innings WHERE match_id = $1 AND innings_number = 1`, matchID)
 		if err == nil {
@@ -642,16 +610,7 @@ func CheckAndUpdateInningsMatchCompletion(
 				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
 			)`, matchID, battingTeamID, inningsID)
 
-		_, _ = tx.Exec(`
-			UPDATE player_match_stats
-			SET dismissal_type = 'retired_out',
-			    is_not_out     = FALSE,
-			    updated_at     = NOW()
-			WHERE match_id = $1
-			AND dismissal_type = 'retired_hurt'
-			AND player_id IN (
-				SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-			)`, matchID, battingTeamID)
+
 
 		// Close innings
 		_, _ = tx.Exec(`
