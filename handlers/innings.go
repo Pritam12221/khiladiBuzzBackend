@@ -89,24 +89,4 @@ func UndoLastBall(c *gin.Context) {
 	c.JSON(http.StatusOK, details)
 }
 
-func RetireHurt(c *gin.Context) {
-	inningsID := c.Param("id")
-	if inningsID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "innings id is required"})
-		return
-	}
-
-	var req models.RetireHurtRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "player_id is required"})
-		return
-	}
-
-	if err := dbhelper.RetireHurtPlayer(inningsID, req.MatchID, req.PlayerID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error":"failed to make him retire_hurt"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "game bajgya bhai ka"})
-}
 

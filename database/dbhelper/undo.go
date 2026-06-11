@@ -5,8 +5,9 @@ import (
 	"fmt"
 	db "khiladiBuzz/database"
 	"khiladiBuzz/models"
+	"khiladiBuzz/utils"
 	"math"
-
+	"strings"
 )
 
 func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
@@ -69,7 +70,9 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 	isNoBall := lastBall.ExtraType != nil && *lastBall.ExtraType == "no_ball"
 	isBye := lastBall.ExtraType != nil && *lastBall.ExtraType == "bye"
 	isLegBye := lastBall.ExtraType != nil && *lastBall.ExtraType == "leg_bye"
-	isLegal := !isWide && !isNoBall
+	isRetiredOut := lastBall.IsWicket && lastBall.DismissalType != nil && strings.ToLower(*lastBall.DismissalType) == "retired_out"
+	isRetiredHurt := lastBall.DismissalType != nil && strings.ToLower(*lastBall.DismissalType) == "retired_hurt"
+	isLegal := !isWide && !isNoBall && !isRetiredOut && !isRetiredHurt
 
 	ballRuns := lastBall.RunsScored + lastBall.ExtrasRuns
 	if isWide || isNoBall {
@@ -89,24 +92,10 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 	}
 
 	// Revert innings overs count
-	var newOvers float64
-	var totalLegalBalls int
-	if isLegal {
-		currentOvers := innings.TotalOvers
-		completedOvers := int(currentOvers)
-		balls := int(math.Round((currentOvers - float64(completedOvers)) * 10))
-
-		totalLegalBalls = completedOvers*6 + balls - 1
-		if totalLegalBalls < 0 {
-			totalLegalBalls = 0
-		}
-		newOvers = float64(totalLegalBalls/6) + float64(totalLegalBalls%6)*0.1
-	} else {
-		newOvers = innings.TotalOvers
-		completedOvers := int(newOvers)
-		balls := int(math.Round((newOvers - float64(completedOvers)) * 10))
-		totalLegalBalls = completedOvers*6 + balls
-	}
+	newOvers := utils.CalculateNewOvers(innings.TotalOvers, isLegal, -1)
+	completedOvers := int(newOvers)
+	balls := int(math.Round((newOvers - float64(completedOvers)) * 10))
+	totalLegalBalls := completedOvers*6 + balls
 
 	// Revert innings stats on last ball
 	_, err = tx.Exec(`
@@ -294,8 +283,8 @@ func UndoLastBall(inningsID string) (*models.InningsPlayersDetails, error) {
 		return nil, fmt.Errorf("failed to revert bowler match stats: %w", err)
 	}
 
-	// Revert dismissed player to not out
-	if lastBall.IsWicket && lastBall.DismissedPlayerID != nil {
+	// Revert dismissed player to not out / clear dismissal type
+	if (lastBall.IsWicket || isRetiredHurt) && lastBall.DismissedPlayerID != nil {
 		_, err = tx.Exec(`
 			UPDATE player_match_stats SET
 				is_not_out     = TRUE,

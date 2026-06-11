@@ -6,6 +6,7 @@ import (
 	"khiladiBuzz/models"
 	"math"
 	"strings"
+	"khiladiBuzz/utils"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -20,16 +21,7 @@ func UpdateInningsStatsTx(tx *sqlx.Tx, inningsID string, runsInc, wicketsInc int
 	}
 
 
-	var newOvers float64
-	if isLegal {
-		completedOvers := int(currentOvers)
-		balls := int(math.Round((currentOvers - float64(completedOvers)) * 10))
-
-		totalBalls := completedOvers*6 + balls + 1
-		newOvers = float64(totalBalls/6) + float64(totalBalls%6)*0.1
-	} else {
-		newOvers = currentOvers
-	}
+		newOvers := utils.CalculateNewOvers(currentOvers, isLegal, 1)
 
 	_, err = tx.Exec(`
 		UPDATE innings SET
@@ -43,7 +35,7 @@ func UpdateInningsStatsTx(tx *sqlx.Tx, inningsID string, runsInc, wicketsInc int
 	return err
 }
 
-// UpdateNonStrikerStatsTx ensures the non-striker player has a player_match_stats row and is marked as not out.
+// UpdateNonStrikerStatsTx ensures that it makes row for the non-striker player when he comes to bat
 func UpdateNonStrikerStatsTx(tx *sqlx.Tx, inningsID string, nonStrikerID string) error {
 	_, err := tx.Exec(`
 		INSERT INTO player_match_stats (match_id, innings_id, player_id)
@@ -54,7 +46,7 @@ func UpdateNonStrikerStatsTx(tx *sqlx.Tx, inningsID string, nonStrikerID string)
 	return err
 }
 
-// UpdateStrikerStatsTx updates the active striker's batting statistics in the player_match_stats table.
+// UpdateStrikerStatsTx updates the active striker (strike rotations)
 func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsScored int, isBallFaced, isBye, isLegBye bool) error {
 	runsForBatsman := runsScored
 	if isBye || isLegBye {
@@ -62,9 +54,10 @@ func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsS
 	}
 
 	foursInc, sixesInc := 0, 0
-	if runsForBatsman == 4 {
+	switch runsForBatsman {
+	case 4:
 		foursInc = 1
-	} else if runsForBatsman == 6 {
+	case 6:
 		sixesInc = 1
 	}
 
@@ -111,17 +104,7 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallReq
 		return err
 	}
 
-	//check for new overs
-	var newOvers float64
-	if isLegal {
-		completedOvers := int(currentOvers)
-		balls := int(math.Round((currentOvers - float64(completedOvers)) * 10))
-
-		totalBalls := completedOvers*6 + balls + 1
-		newOvers = float64(totalBalls/6) + float64(totalBalls%6)*0.1
-	} else {
-		newOvers = currentOvers
-	}
+	newOvers := utils.CalculateNewOvers(currentOvers, isLegal, 1)
 
 	query := `
 		INSERT INTO player_match_stats (match_id, innings_id, player_id, runs_given, wickets_taken, maiden_overs, overs_bowled)
@@ -136,14 +119,19 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallReq
 	return err
 }
 
-// UpdateDismissedPlayerStatsTx updates the dismissed player's match stats.
+// UpdateDismissedPlayerStatsTx updates the dismissed player
 func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest) error {
 	if req.DismissedPlayerID == nil {
 		return nil
 	}
 
+	isNotOut := false
+	if req.DismissalType != nil && strings.ToLower(*req.DismissalType) == "retired_hurt" {
+		isNotOut = true
+	}
+
 	var bowlerIDVal *string
-	if req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_out" {
+	if req.DismissalType != nil && *req.DismissalType != "runout" && *req.DismissalType != "retired_out" && *req.DismissalType != "retired_hurt" {
 		bowlerIDVal = &req.BowlerID
 	}
 
@@ -153,20 +141,19 @@ func UpdateDismissedPlayerStatsTx(tx *sqlx.Tx, inningsID string, req models.Reco
 	}
 
 	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, innings_id, player_id, is_not_out, dismissal_type, dismissed_by, fielder_id)
-		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, FALSE, $3::dismissal_type_enum, $4, $5)
-		ON CONFLICT (innings_id, player_id) DO UPDATE SET
-			is_not_out     = FALSE,
-			dismissal_type = EXCLUDED.dismissal_type,
-			dismissed_by   = EXCLUDED.dismissed_by,
-			fielder_id     = EXCLUDED.fielder_id,
-			updated_at     = NOW()`,
-		inningsID, *req.DismissedPlayerID, req.DismissalType, bowlerIDVal, fielderIDVal,
+		UPDATE player_match_stats SET
+			is_not_out     = $3,
+			dismissal_type = $4::dismissal_type_enum,
+			dismissed_by   = $5,
+			fielder_id     = $6,
+			updated_at     = NOW()
+		WHERE innings_id = $1 AND player_id = $2`,
+		inningsID, *req.DismissedPlayerID, isNotOut, req.DismissalType, bowlerIDVal, fielderIDVal,
 	)
 	return err
 }
 
-// FetchPlayerMatchStatsSummaryTx fetches statistics filtered by inningsID
+// FetchPlayerMatchStatsSummaryTx fetches statistics this is assocciated record bowl funtion 
 func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, inningsID string, playerID string) (*models.PlayerStatsSummary, error) {
 	var stats models.PlayerStatsSummary
 	err := tx.Get(&stats, `
@@ -181,7 +168,7 @@ func FetchPlayerMatchStatsSummaryTx(tx *sqlx.Tx, inningsID string, playerID stri
 	return &stats, nil
 }
 
-//splits them into batting and bowling teams inc common
+//splits them into batting and bowling teams inc common (when umpire open the scoring panel)
 func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error) {
 	var innings struct {
 		MatchID            string  `db:"match_id"`
@@ -344,6 +331,27 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		}
 	}
 
+	var playerStats []struct {
+		PlayerID      string  `db:"player_id"`
+		DismissalType *string `db:"dismissal_type"`
+	}
+	_ = db.KhiladiDb.Select(&playerStats, `
+		SELECT player_id, dismissal_type 
+		FROM player_match_stats 
+		WHERE innings_id = $1`, inningsID)
+	
+	dismissedPlayerIDs := []string{}
+	retiredHurtPlayerIDs := []string{}
+	for _, ps := range playerStats {
+		if ps.DismissalType != nil {
+			if *ps.DismissalType == "retired_hurt" {
+				retiredHurtPlayerIDs = append(retiredHurtPlayerIDs, ps.PlayerID)
+			} else {
+				dismissedPlayerIDs = append(dismissedPlayerIDs, ps.PlayerID)
+			}
+		}
+	}
+
 	details := &models.InningsPlayersDetails{
 		MatchID:            innings.MatchID,
 		InningsNumber:      innings.InningsNumber,
@@ -370,6 +378,8 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		FirstInningsRuns:   firstInningsRuns,
 		FirstInningsWickets: firstInningsWickets,
 		BowlerStats:        bowlStats,
+		DismissedPlayerIDs:   dismissedPlayerIDs,
+		RetiredHurtPlayerIDs: retiredHurtPlayerIDs,
 	}
 
 	return details, nil
@@ -499,6 +509,12 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 
 	if strikerID != nil && *strikerID != "" {
 		_, _ = tx.Exec(`
+			UPDATE player_match_stats 
+			SET dismissal_type = NULL 
+			WHERE innings_id = $1 AND player_id = $2 AND dismissal_type = 'retired_hurt'`,
+			inningsID, *strikerID,
+		)
+		_, _ = tx.Exec(`
 			INSERT INTO player_match_stats (match_id, innings_id, player_id)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (innings_id, player_id) DO NOTHING`,
@@ -507,6 +523,12 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 	}
 
 	if nonStrikerID != nil && *nonStrikerID != "" {
+		_, _ = tx.Exec(`
+			UPDATE player_match_stats 
+			SET dismissal_type = NULL 
+			WHERE innings_id = $1 AND player_id = $2 AND dismissal_type = 'retired_hurt'`,
+			inningsID, *nonStrikerID,
+		)
 		_, _ = tx.Exec(`
 			INSERT INTO player_match_stats (match_id, innings_id, player_id)
 			VALUES ($1, $2, $3)

@@ -67,7 +67,11 @@ func RecordBall(c *gin.Context) {
 		"bowled": true, "caught": true, "lbw": true,
 		"runout": true, "stumped": true, "hit_wicket": true, "retired_hurt": true, "retired_out": true,
 	}
-	if req.IsWicket && (req.DismissalType == nil || !validDismissals[*req.DismissalType]) {
+	if req.DismissalType != nil && !validDismissals[*req.DismissalType] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dismissal_type"})
+		return
+	}
+	if req.IsWicket && req.DismissalType == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "valid dismissal_type required when is_wicket is true"})
 		return
 	}

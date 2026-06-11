@@ -1,7 +1,6 @@
 package dbhelper
 
 import (
-	"fmt"
 	db "khiladiBuzz/database"
 	model "khiladiBuzz/models"
 )
@@ -92,39 +91,4 @@ func GetAllPlayers(search string, limit, offset int) ([]model.Player, error) {
 	`
 	err := db.KhiladiDb.Select(&players, query, search, limit, offset)
 	return players, err
-}
-
-func RetireHurtPlayer(inningsID string, matchID string, playerID string) error {
-	tx, err := db.KhiladiDb.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-
-	_, err = tx.Exec(`
-		UPDATE player_match_stats
-		SET is_not_out     = TRUE,
-		    dismissal_type = 'retired_hurt',
-		    updated_at     = NOW()
-		WHERE innings_id = $1
-		  AND player_id = $2`,
-		inningsID, playerID)
-	if err != nil {
-		return fmt.Errorf("retire hurt: failed to update player stats: %w", err)
-	}
-
-	// Remove this retire hurt player  from strike or non strike
-	_, err = tx.Exec(`
-		UPDATE innings SET
-			active_striker_id     = CASE WHEN active_striker_id     = $1::uuid THEN NULL ELSE active_striker_id     END,
-			active_non_striker_id = CASE WHEN active_non_striker_id = $1::uuid THEN NULL ELSE active_non_striker_id END,
-			updated_at            = NOW()
-		WHERE id = $2`,
-		playerID, inningsID)
-	if err != nil {
-		return fmt.Errorf("retire hurt change failed %w", err)
-	}
-
-	return tx.Commit()
 }

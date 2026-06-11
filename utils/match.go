@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"math"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,4 +24,18 @@ func SetPagination(c *gin.Context) (int, int) {
 
 	return limit, offset
 
+}
+
+func CalculateNewOvers(currentOvers float64, isLegal bool, count int) float64 {
+	if !isLegal {
+		return currentOvers
+	}
+	completedOvers := int(currentOvers)
+	balls := int(math.Round((currentOvers - float64(completedOvers)) * 10))
+
+	totalBalls := completedOvers*6 + balls + count
+	if totalBalls < 0 {
+		totalBalls = 0
+	}
+	return float64(totalBalls/6) + float64(totalBalls%6)*0.1
 }

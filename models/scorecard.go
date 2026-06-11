@@ -80,15 +80,14 @@ type MatchDetail struct {
 	Team1ID          string       `json:"team1_id"`
 	Team2ID          string       `json:"team2_id"`
 	Status           string       `json:"status"`
-	StatusText       string       `json:"statusText"`
-	ResultText       *string      `json:"resultText,omitempty"`
+	WinnerTeamID     *string      `json:"winnerTeamId,omitempty"`
 	Date             string       `json:"date"`
 	Time             string       `json:"time"`
 	TotalOvers       int          `json:"totalOvers"`
 	TossWinner       string       `json:"tossWinner"`
 	TossDecision     string       `json:"tossDecision"`
-	Umpire           string       `json:"umpire"`
-	Host             string       `json:"host"`
+	Umpire           *string      `json:"umpire"`
+	Host             *string      `json:"host"`
 	HostID           string       `json:"host_id"`
 	PlayerOfTheMatch *struct {
 		Name      string `json:"name"`

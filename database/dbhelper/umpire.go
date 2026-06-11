@@ -40,7 +40,9 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	isNoBall := req.ExtraType != nil && *req.ExtraType == "no_ball"
 	isBye := req.ExtraType != nil && *req.ExtraType == "bye"
 	isLegBye := req.ExtraType != nil && *req.ExtraType == "leg_bye"
-	isLegal := !isWide && !isNoBall
+	isRetiredOut := req.IsWicket && req.DismissalType != nil && strings.ToLower(*req.DismissalType) == "retired_out"
+	isRetiredHurt := req.DismissalType != nil && strings.ToLower(*req.DismissalType) == "retired_hurt"
+	isLegal := !isWide && !isNoBall && !isRetiredOut && !isRetiredHurt
 
 	// Calculate innings run increment
 	inningsRuns := req.RunsScored + req.ExtrasRuns
@@ -49,7 +51,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 	}
 
 	wicketDelta := 0
-	if req.IsWicket {
+	if req.IsWicket && !isRetiredHurt {
 		wicketDelta = 1
 	}
 
@@ -89,8 +91,8 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to update bowler stats: %w", err)
 	}
 
-	//  Update dismissed player stats if a wicket fell
-	if req.IsWicket && req.DismissedPlayerID != nil {
+	//  Update dismissed player stats if a wicket fell or player retired hurt
+	if (req.IsWicket || isRetiredHurt) && req.DismissedPlayerID != nil {
 		if err = UpdateDismissedPlayerStatsTx(tx, inningsID, req); err != nil {
 			return nil, fmt.Errorf("failed to update dismissed player stats: %w", err)
 		}
@@ -184,7 +186,8 @@ func resolveNextActivePlayers(
 	var nextBowlerID *string = &req.BowlerID
 
 	// check if player is out or not
-	if req.IsWicket && req.DismissedPlayerID != nil {
+	isRetiredHurt := req.DismissalType != nil && strings.ToLower(*req.DismissalType) == "retired_hurt"
+	if (req.IsWicket || isRetiredHurt) && req.DismissedPlayerID != nil {
 		if *req.DismissedPlayerID == req.StrikerID {
 			nextStrikerID = nil
 		} else if req.NonStrikerID != nil && *req.DismissedPlayerID == *req.NonStrikerID {
@@ -231,6 +234,7 @@ func resolveNextActivePlayers(
 		WHERE innings_id = $1
 		  AND over_number = $2
 		  AND (extra_type IS NULL OR (extra_type != 'wide' AND extra_type != 'no_ball'))
+		  AND (dismissal_type IS NULL OR dismissal_type != 'retired_out')
 	`, inningsID, req.OverNumber); err == nil && validBalls >= 6 {
 		// Batsmen change ends at the start of the next over
 		if nextStrikerID != nil && nextNonStrikerID != nil {
@@ -265,7 +269,7 @@ func fetchNextPlayerStatsTx(tx *sqlx.Tx, inningsID string, playerArg *string) *m
 // validateRecordBall checks if a ball can be legally recorded based on match status
 func validateRecordBall(tx *sqlx.Tx, inningsID string, matchStatus string, req models.RecordBallRequest) error {
 	if matchStatus == "completed" {
-		return fmt.Errorf("validation error: cannot record ball, match is already completed")
+		return fmt.Errorf("match is already completed")
 	}
 
 	// Validate that the striker and non-striker if they are out or not

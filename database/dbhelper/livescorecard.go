@@ -120,12 +120,7 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 		}
 	}
 
-	if match.Status == "completed" && match.WinnerTeamID == nil {
-		if scorecard.Innings2 != nil && scorecard.Innings1.Runs == scorecard.Innings2.Runs {
-			text := "Match tied"
-			scorecard.ResultText = &text
-		}
-	}
+
 
 	// Fetch Squads
 	squad1, _ := FetchMatchSquad(matchID, match.TeamAID, match.TeamA)
@@ -528,41 +523,6 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		tossWinnerName = match.TeamB
 	}
 
-	statusText := ""
-	switch match.Status {
-	case "live":
-		statusText = "LIVE"
-	case "completed":
-		statusText = "COMPLETED"
-	}
-
-	var resultTextVal *string
-	if match.Status == "completed" {
-		var text string
-		if match.WinnerTeamID != nil {
-			switch *match.WinnerTeamID {
-			case match.TeamAID:
-				text = match.TeamA + " won the match"
-			case match.TeamBID:
-				text = match.TeamB + " won the match"
-			default:
-				text = "Match tied"
-			}
-		} else {
-			text = "Match completed"
-		}
-		resultTextVal = &text
-	}
-
-	umpireName := "Match Umpire"
-	if match.UmpireName != nil {
-		umpireName = *match.UmpireName
-	}
-	hostName := "KhiladiBuzz"
-	if match.HostName != nil {
-		hostName = *match.HostName
-	}
-
 	return &models.MatchDetail{
 		ID:           match.ID,
 		TeamA:        match.TeamA,
@@ -570,14 +530,13 @@ func assembleMatchDetail(match *matchRow) *models.MatchDetail {
 		Team1ID:      match.TeamAID,
 		Team2ID:      match.TeamBID,
 		Status:       match.Status,
-		StatusText:   statusText,
-		ResultText:   resultTextVal,
+		WinnerTeamID: match.WinnerTeamID,
 		Date:         match.CreatedAt,
 		TotalOvers:   match.TotalOvers,
 		TossWinner:   tossWinnerName,
 		TossDecision: match.TossDecision,
-		Umpire:       umpireName,
-		Host:         hostName,
+		Umpire:       match.UmpireName,
+		Host:         match.HostName,
 		HostID:       match.HostID,
 	}
 }
