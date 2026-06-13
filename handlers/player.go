@@ -72,11 +72,13 @@ func SearchPlayers(c *gin.Context) {
 }
 
 func FetchAllPlayers(c *gin.Context) {
+
+	//need to fix
 	search := strings.TrimSpace(c.Query("search"))
 
 	var limit, offset int
 	if c.Query("page") == "" && c.Query("limit") == "" {
-		limit = 1000
+		limit = 100
 		offset = 0
 	} else {
 		limit, offset = utils.SetPagination(c)

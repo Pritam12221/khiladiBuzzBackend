@@ -47,6 +47,14 @@ type PlayerStatsSummary struct {
 
 
 
+type BallSummary struct {
+	RunsScored    int     `json:"runs_scored" db:"runs_scored"`
+	ExtrasRuns    int     `json:"extras_runs" db:"extras_runs"`
+	ExtraType     *string `json:"extra_type" db:"extra_type"`
+	IsWicket      bool    `json:"is_wicket" db:"is_wicket"`
+	DismissalType *string `json:"dismissal_type" db:"dismissal_type"`
+}
+
 type RecordBallResponseDetails struct {
 	Striker          *PlayerStatsSummary `json:"striker,omitempty"`
 	NonStriker       *PlayerStatsSummary `json:"non_striker,omitempty"`
@@ -54,6 +62,7 @@ type RecordBallResponseDetails struct {
 	NextStrikerID    *string             `json:"next_striker_id,omitempty"`
 	NextNonStrikerID *string             `json:"next_non_striker_id,omitempty"`
 	NextBowlerID     *string             `json:"next_bowler_id,omitempty"`
+	CurrentOverBalls []BallSummary       `json:"current_over_balls"`
 }
 
 type CreateInningsRequest struct {
@@ -122,4 +131,5 @@ type InningsPlayersDetails struct {
 	BowlerStats        []BowlStat `json:"bowler_stats"`
 	DismissedPlayerIDs   []string   `json:"dismissed_player_ids"`
 	RetiredHurtPlayerIDs []string   `json:"retired_hurt_player_ids"`
+	CurrentOverBalls     []BallSummary `json:"current_over_balls"`
 }

@@ -352,6 +352,11 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		}
 	}
 
+	logBalls, err := FetchCurrentOverBalls(inningsID, innings.TotalOvers, innings.ActiveBowlerID)
+	if err != nil {
+		logBalls = []models.BallSummary{}
+	}
+
 	details := &models.InningsPlayersDetails{
 		MatchID:            innings.MatchID,
 		InningsNumber:      innings.InningsNumber,
@@ -380,6 +385,7 @@ func FetchInningsPlayers(inningsID string) (*models.InningsPlayersDetails, error
 		BowlerStats:        bowlStats,
 		DismissedPlayerIDs:   dismissedPlayerIDs,
 		RetiredHurtPlayerIDs: retiredHurtPlayerIDs,
+		CurrentOverBalls:     logBalls,
 	}
 
 	return details, nil
@@ -547,6 +553,44 @@ func UpdateActivePlayers(inningsID string, strikerID, nonStrikerID, bowlerID *st
 	}
 
 	return tx.Commit()
+}
+
+// ball history
+func FetchCurrentOverBalls(inningsID string, totalOvers float64, activeBowlerID *string) ([]models.BallSummary, error) {
+	currentOver := int(totalOvers)
+	if totalOvers == float64(currentOver) && currentOver > 0 && activeBowlerID == nil {
+		currentOver = currentOver - 1
+	}
+
+	var balls []models.BallSummary
+	err := db.KhiladiDb.Select(&balls, `
+		SELECT runs_scored, extras_runs, extra_type, is_wicket, dismissal_type
+		FROM balls
+		WHERE innings_id = $1 AND over_number = $2
+		ORDER BY ball_number ASC, created_at ASC`, inningsID, currentOver)
+	if err != nil {
+		return nil, err
+	}
+	return balls, nil
+}
+
+//ball history used with record ball funcion
+func FetchCurrentOverBallsTx(tx *sqlx.Tx, inningsID string, totalOvers float64, activeBowlerID *string) ([]models.BallSummary, error) {
+	currentOver := int(totalOvers)
+	if totalOvers == float64(currentOver) && currentOver > 0 && activeBowlerID == nil {
+		currentOver = currentOver - 1
+	}
+
+	var balls []models.BallSummary
+	err := tx.Select(&balls, `
+		SELECT runs_scored, extras_runs, extra_type, is_wicket, dismissal_type
+		FROM balls
+		WHERE innings_id = $1 AND over_number = $2
+		ORDER BY ball_number ASC, created_at ASC`, inningsID, currentOver)
+	if err != nil {
+		return nil, err
+	}
+	return balls, nil
 }
 
 

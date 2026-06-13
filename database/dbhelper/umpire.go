@@ -133,6 +133,11 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to update next active players: %w", err)
 	}
 
+	logBalls, err := 	FetchCurrentOverBallsTx(tx, inningsID, currentInnings.TotalOvers, bowlerArg)
+	if err != nil {
+		logBalls = []models.BallSummary{}
+	}
+
 	result := models.RecordBallResponseDetails{
 		Striker:          fetchNextPlayerStatsTx(tx, inningsID, strikerArg),
 		NonStriker:       fetchNextPlayerStatsTx(tx, inningsID, nonStrikerArg),
@@ -140,6 +145,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		NextStrikerID:    strikerArg,
 		NextNonStrikerID: nonStrikerArg,
 		NextBowlerID:     bowlerArg,
+		CurrentOverBalls: logBalls,
 	}
 
 	if err = tx.Commit(); err != nil {

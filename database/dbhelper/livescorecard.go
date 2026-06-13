@@ -51,7 +51,7 @@ func populateInningsData(match *matchRow, inn inningsRow) (models.InningsData, e
 	}
 	bowlStats, err := FetchBowlingStats(match.ID, inn.ID, inn.BowlingTeamID)
 	if err != nil {
-		fmt.Printf("livescorecard: FetchBowlingStats error: %v\n", err)
+		fmt.Printf("bowling stats error %v\n", err)
 		return models.InningsData{}, err
 	}
 	
