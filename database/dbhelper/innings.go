@@ -67,14 +67,13 @@ func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsS
 	}
 
 	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, innings_id, player_id, runs_scored, balls_faced, fours, sixes)
-		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, $3, $4, $5, $6)
-		ON CONFLICT (innings_id, player_id) DO UPDATE SET
-			runs_scored = player_match_stats.runs_scored + EXCLUDED.runs_scored,
-			balls_faced = player_match_stats.balls_faced + EXCLUDED.balls_faced,
-			fours       = player_match_stats.fours       + EXCLUDED.fours,
-			sixes       = player_match_stats.sixes       + EXCLUDED.sixes,
-			updated_at  = NOW()`,
+		UPDATE player_match_stats SET
+			runs_scored = runs_scored + $3,
+			balls_faced = balls_faced + $4,
+			fours       = fours       + $5,
+			sixes       = sixes       + $6,
+			updated_at  = NOW()
+		WHERE innings_id = $1 AND player_id = $2`,
 		inningsID, strikerID, runsForBatsman, ballsFacedInc, foursInc, sixesInc,
 	)
 	return err
@@ -107,13 +106,12 @@ func UpdateBowlerStatsTx(tx *sqlx.Tx, inningsID string, req models.RecordBallReq
 	newOvers := utils.CalculateNewOvers(currentOvers, isLegal, 1)
 
 	query := `
-		INSERT INTO player_match_stats (match_id, innings_id, player_id, runs_given, wickets_taken, maiden_overs, overs_bowled)
-		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2, $3, $4, 0, $5)
-		ON CONFLICT (innings_id, player_id) DO UPDATE SET
-			runs_given    = player_match_stats.runs_given    + EXCLUDED.runs_given,
-			wickets_taken = player_match_stats.wickets_taken + EXCLUDED.wickets_taken,
+		UPDATE player_match_stats SET
+			runs_given    = runs_given    + $3,
+			wickets_taken = wickets_taken + $4,
 			overs_bowled  = $5,
-			updated_at    = NOW()`
+			updated_at    = NOW()
+		WHERE innings_id = $1 AND player_id = $2`
 
 	_, err = tx.Exec(query, inningsID, req.BowlerID, bowlerRuns, bowlerWickets, newOvers)
 	return err
@@ -408,8 +406,14 @@ const insertInningsQuery = `
 
 // CreateInningsTx (1st inning with  match creation)
 func CreateInningsTx(tx *sqlx.Tx, matchID string, inningsNumber int, battingTeamID, bowlingTeamID string, status,strikerID,nonStrikerID,bowlerID string) (string, error) {
+	var existingID string
+	err := tx.Get(&existingID, `SELECT id FROM innings WHERE match_id = $1 AND innings_number = $2`, matchID, inningsNumber)
+	if err == nil && existingID != "" {
+		return existingID, nil
+	}
+
 	var inningsID string
-	err := tx.Get(&inningsID, `
+	err = tx.Get(&inningsID, `
 		INSERT INTO innings (match_id, innings_number, batting_team_id, bowling_team_id, status,active_striker_id,active_non_striker_id,active_bowler_id)
 		VALUES ($1, $2, $3, $4, $5,$6,$7,$8)
 		RETURNING id`, matchID, inningsNumber, battingTeamID, bowlingTeamID, status,strikerID,nonStrikerID,bowlerID)
@@ -423,6 +427,13 @@ func CreateInnings(matchID string, inningsNumber int, battingTeamID, bowlingTeam
 		return "", err
 	}
 	defer tx.Rollback()
+
+	
+	var existingID string
+	err = tx.Get(&existingID, `SELECT id FROM innings WHERE match_id = $1 AND innings_number = $2`, matchID, inningsNumber)
+	if err == nil && existingID != "" {
+		return existingID, nil
+	}
 
 	var inningsID string
 	err = tx.Get(&inningsID, insertInningsQuery, matchID, inningsNumber, battingTeamID, bowlingTeamID, status, strikerID, nonStrikerID, bowlerID)
@@ -763,4 +774,87 @@ func CheckAndUpdateInningsMatchCompletion(
 	}
 
 	return nil
+}
+
+// populateInningsData fetches, aggregates, and formats all batting, bowling, and extras data for a single
+func PopulateInningsData(match *matchRow, inn inningsRow) (models.InningsData, error) {
+
+		teamName := match.TeamA
+	if inn.BattingTeamID == match.TeamBID {
+		teamName = match.TeamB
+	}
+
+	innData := models.InningsData{
+		ID:            inn.ID,
+		TeamName:      teamName,
+		Runs:          inn.TotalRuns,
+		Wickets:       inn.TotalWickets,
+		Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
+		Status:        inn.Status,
+		Batting:       []models.BatsmanRow{},
+		Bowling:       []models.BowlerRow{},
+		YetToBat:      []string{},
+		FallOfWickets: []string{}, 
+		TopBatsmen:    []models.TopBatsman{},
+		TopBowlers:    []models.TopBowler{},
+		Extras:        models.ExtrasSummary{},
+	}
+
+	// track order of player which they are batting
+	balls, _ := FetchInningsBalls(inn.ID)
+	orderedBatsmenIDs := getOrderedBatsmen(balls, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
+	orderedBowlersIDs := getOrderedBowlers(balls, inn.ActiveBowlerID)
+
+	// Populate Batting stats
+	batStats, err := FetchBattingStats(match.ID, inn.ID, inn.BattingTeamID)
+	if err != nil {
+		fmt.Printf(" inside FetchBattingStats in liveScorecard: %v\n", err)
+		return models.InningsData{}, err
+	}
+	innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
+
+	// Populate bowlers stats 
+	activeBowlerID := ""
+	if inn.ActiveBowlerID != nil {
+		activeBowlerID = *inn.ActiveBowlerID
+	}
+	bowlStats, err := FetchBowlingStats(match.ID, inn.ID, inn.BowlingTeamID)
+	if err != nil {
+		fmt.Print("inside strikerRateBowl func",bowlStats)
+		return models.InningsData{}, err
+	}
+	
+	if activeBowlerID != "" && inn.ActiveBowlerName != nil {
+		found := false
+		for _, bs := range bowlStats {
+			if bs.PlayerID == activeBowlerID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			bowlStats = append(bowlStats, models.BowlStat{
+				PlayerID: activeBowlerID,
+				Name:     *inn.ActiveBowlerName,
+			})
+		}
+	}
+	innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, activeBowlerID)
+
+	// fetch total innings
+	innData.Extras, _ = FetchInningsExtras(inn.ID)
+
+	// Populate Yet to Bat Players
+	innData.YetToBat, _ = FetchYetToBat(match.ID, inn.BattingTeamID, orderedBatsmenIDs)
+
+	// summary table 
+	if match.Status == "completed" {
+		innData.TopBatsmen, _ = FetchTopBatsmenSummary(inn.ID, inn.BattingTeamID)
+		innData.TopBowlers, _ = FetchTopBowlersSummary(inn.ID, inn.BowlingTeamID)
+	}
+
+	// to handle solo player
+	normalizeInningsData(&innData)
+
+	return innData, nil
 }

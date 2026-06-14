@@ -1,4 +1,5 @@
 package models
+import "time"
 
 type BatsmanRow struct {
 	Name          string  `json:"name"`
@@ -81,7 +82,7 @@ type MatchDetail struct {
 	Team2ID          string       `json:"team2_id"`
 	Status           string       `json:"status"`
 	WinnerTeamID     *string      `json:"winnerTeamId,omitempty"`
-	Date             string       `json:"date"`
+	Date             time.Time       `json:"date"`
 	Time             string       `json:"time"`
 	TotalOvers       int          `json:"totalOvers"`
 	TossWinner       string       `json:"tossWinner"`
@@ -89,10 +90,6 @@ type MatchDetail struct {
 	Umpire           *string      `json:"umpire"`
 	Host             *string      `json:"host"`
 	HostID           string       `json:"host_id"`
-	PlayerOfTheMatch *struct {
-		Name      string `json:"name"`
-		Stats     string `json:"stats"`
-	} `json:"playerOfTheMatch,omitempty"`
 	Squad1   *PlayingSquad `json:"squad1,omitempty"`
 	Squad2   *PlayingSquad `json:"squad2,omitempty"`
 	Innings1 InningsData  `json:"innings1"`

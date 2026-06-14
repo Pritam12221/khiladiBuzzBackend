@@ -5,92 +5,11 @@ import (
 	db "khiladiBuzz/database"
 	"khiladiBuzz/models"
 	"math"
+	"slices"
+	"time"
 )
 
-// populateInningsData fetches, aggregates, and formats all batting, bowling, and extras data for a single
-func populateInningsData(match *matchRow, inn inningsRow) (models.InningsData, error) {
-
-		teamName := match.TeamA
-	if inn.BattingTeamID == match.TeamBID {
-		teamName = match.TeamB
-	}
-
-	innData := models.InningsData{
-		ID:            inn.ID,
-		TeamName:      teamName,
-		Runs:          inn.TotalRuns,
-		Wickets:       inn.TotalWickets,
-		Overs:         fmt.Sprintf("%.1f", inn.TotalOvers),
-		Status:        inn.Status,
-		Batting:       []models.BatsmanRow{},
-		Bowling:       []models.BowlerRow{},
-		YetToBat:      []string{},
-		FallOfWickets: []string{}, 
-		TopBatsmen:    []models.TopBatsman{},
-		TopBowlers:    []models.TopBowler{},
-		Extras:        models.ExtrasSummary{},
-	}
-
-	// track order of player which they are batting
-	balls, _ := FetchInningsBalls(inn.ID)
-	orderedBatsmenIDs, seenBatsmen := getOrderedBatsmen(balls, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
-	orderedBowlersIDs, seenBowlers := getOrderedBowlers(balls, inn.ActiveBowlerID)
-
-	// Populate Batting stats
-	batStats, err := FetchBattingStats(match.ID, inn.ID, inn.BattingTeamID)
-	if err != nil {
-		fmt.Printf("livescorecard: FetchBattingStats error: %v\n", err)
-		return models.InningsData{}, err
-	}
-	innData.Batting = formatBattingStats(batStats, orderedBatsmenIDs, seenBatsmen, inn.ActiveStrikerID, inn.ActiveNonStrikerID)
-
-	// Populate bowlers stats 
-	activeBowlerID := ""
-	if inn.ActiveBowlerID != nil {
-		activeBowlerID = *inn.ActiveBowlerID
-	}
-	bowlStats, err := FetchBowlingStats(match.ID, inn.ID, inn.BowlingTeamID)
-	if err != nil {
-		fmt.Printf("bowling stats error %v\n", err)
-		return models.InningsData{}, err
-	}
-	
-	if activeBowlerID != "" && inn.ActiveBowlerName != nil {
-		found := false
-		for _, bs := range bowlStats {
-			if bs.PlayerID == activeBowlerID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			bowlStats = append(bowlStats, models.BowlStat{
-				PlayerID: activeBowlerID,
-				Name:     *inn.ActiveBowlerName,
-			})
-		}
-	}
-	innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, seenBowlers, activeBowlerID)
-
-	// fetch total innings
-	innData.Extras, _ = FetchInningsExtras(inn.ID)
-
-	// Populate Yet to Bat Players
-	innData.YetToBat, _ = FetchYetToBat(match.ID, inn.BattingTeamID, seenBatsmen)
-
-	// summary table 
-	if match.Status == "completed" {
-		innData.TopBatsmen, _ = FetchTopBatsmenSummary(inn.ID, inn.BattingTeamID)
-		innData.TopBowlers, _ = FetchTopBowlersSummary(inn.ID, inn.BowlingTeamID)
-	}
-
-	// to handle solo player
-	normalizeInningsData(&innData)
-
-	return innData, nil
-}
-
-// FetchMatchScorecard fetches all aggregated innings and match statistics for a public scorecard.
+// FetchMatchScorecard fetches all data req for live scorecard
 func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 
 	// Fetch match-level data
@@ -108,7 +27,7 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 	}
 
 	for _, inn := range innings {
-		innData, err := populateInningsData(match, inn)
+		innData, err := PopulateInningsData(match, inn)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +87,7 @@ type matchRow struct {
 	TotalOvers       int     `db:"total_overs"`
 	TossWinnerTeamID string  `db:"toss_winner_team_id"`
 	TossDecision     string  `db:"toss_decision"`
-	CreatedAt        string  `db:"created_at"`
+	CreatedAt     time.Time  `db:"created_at"`
 	WinnerTeamID     *string `db:"winner_team_id"`
 	HostID           string  `db:"host_id"`
 	HostName         *string `db:"host_name"`
@@ -188,7 +107,7 @@ func fetchMatchMetadata(matchID string) (*matchRow, error) {
 			m.total_overs, 
 			m.toss_winner_team_id, 
 			m.toss_decision,
-			TO_CHAR(m.created_at, 'Mon DD, YYYY') as created_at,
+			m.created_at,
 			m.winner_team_id,
 			m.host_id,
 			u_host.name as host_name,
@@ -235,7 +154,7 @@ func fetchMatchInningsRows(matchID string) ([]inningsRow, error) {
 	return innings, err
 }
 
-// FetchInningsBalls retrieves all deliveries in chronological order for the innings
+// FetchInningsBalls retrieves all deliveries in order for the innings
 func FetchInningsBalls(inningsID string) ([]models.BallRow, error) {
 	var balls []models.BallRow
 	query := `
@@ -313,7 +232,7 @@ func FetchInningsExtras(inningsID string) (models.ExtrasSummary, error) {
 }
 
 // FetchYetToBat retrieves all batting squad players who haven't faced a ball yet
-func FetchYetToBat(matchID, battingTeamID string, seenBatsmen map[string]bool) ([]string, error) {
+func FetchYetToBat(matchID, battingTeamID string, orderedBatsmen []string) ([]string, error) {
 	var teamPlayers []models.PlayerNameRow
 	query := `
 		SELECT DISTINCT p.id as player_id, u.name as player_name
@@ -329,7 +248,7 @@ func FetchYetToBat(matchID, battingTeamID string, seenBatsmen map[string]bool) (
 
 	var yetToBat []string
 	for _, tp := range teamPlayers {
-		if !seenBatsmen[tp.PlayerID] {
+		if !slices.Contains(orderedBatsmen, tp.PlayerID) {
 			yetToBat = append(yetToBat, tp.Name)
 		}
 	}
@@ -390,7 +309,7 @@ func FetchTopBowlersSummary(inningsID, bowlingTeamID string) ([]models.TopBowler
 
 
 
-func getOrderedBatsmen(balls []models.BallRow, activeStriker, activeNonStriker *string) ([]string, map[string]bool) {
+func getOrderedBatsmen(balls []models.BallRow, activeStriker, activeNonStriker *string) []string {
 	var ordered []string
 	seen := map[string]bool{}
 
@@ -414,10 +333,10 @@ func getOrderedBatsmen(balls []models.BallRow, activeStriker, activeNonStriker *
 		ordered = append(ordered, *activeNonStriker)
 	}
 
-	return ordered, seen
+	return ordered
 }
 
-func getOrderedBowlers(balls []models.BallRow, activeBowler *string) ([]string, map[string]bool) {
+func getOrderedBowlers(balls []models.BallRow, activeBowler *string) []string {
 	var ordered []string
 	seen := map[string]bool{}
 
@@ -433,14 +352,14 @@ func getOrderedBowlers(balls []models.BallRow, activeBowler *string) ([]string, 
 		ordered = append(ordered, *activeBowler)
 	}
 
-	return ordered, seen
+	return ordered
 }
 
-func formatBattingStats(batStats []models.BatStat, orderedBatsmenIDs []string, seenBatsmen map[string]bool,activeStrikerID *string,
+func formatBattingStats(batStats []models.BatStat, orderedBatsmenIDs []string, activeStrikerID *string,
 	activeNonStrikerID *string) []models.BatsmanRow {
 	statsMap := make(map[string]models.BatStat)
 	for _, b := range batStats {
-		if seenBatsmen[b.PlayerID] || b.Balls > 0 || b.Runs > 0 {
+		if slices.Contains(orderedBatsmenIDs, b.PlayerID) || b.Balls > 0 || b.Runs > 0 {
 			statsMap[b.PlayerID] = b
 		}
 	}
@@ -482,10 +401,10 @@ func formatBattingStats(batStats []models.BatStat, orderedBatsmenIDs []string, s
 	return formatted
 }
 
-func formatBowlingStats(bowlStats []models.BowlStat, orderedBowlersIDs []string, seenBowlers map[string]bool, activeBowlerID string) []models.BowlerRow {
+func formatBowlingStats(bowlStats []models.BowlStat, orderedBowlersIDs []string, activeBowlerID string) []models.BowlerRow {
 	statsMap := make(map[string]models.BowlStat)
 	for _, b := range bowlStats {
-		if b.PlayerID == activeBowlerID || seenBowlers[b.PlayerID] {
+		if b.PlayerID == activeBowlerID || slices.Contains(orderedBowlersIDs, b.PlayerID) {
 			statsMap[b.PlayerID] = b
 		}
 	}

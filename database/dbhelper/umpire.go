@@ -50,13 +50,13 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		inningsRuns++
 	}
 
-	wicketDelta := 0
+	wicketCount := 0
 	if req.IsWicket && !isRetiredHurt {
-		wicketDelta = 1
+		wicketCount = 1
 	}
 
 	// Update innings total runs, wickets, and overs
-	if err = UpdateInningsStatsTx(tx, inningsID, inningsRuns, wicketDelta, isLegal); err != nil {
+	if err = UpdateInningsStatsTx(tx, inningsID, inningsRuns, wicketCount, isLegal); err != nil {
 		return nil, fmt.Errorf("failed to update innings: %w", err)
 	}
 

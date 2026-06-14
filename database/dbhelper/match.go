@@ -178,7 +178,7 @@ func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, er
 			m.team2_id,
 			m.status, 
 			m.total_overs, 
-			TO_CHAR(m.match_date, 'Mon DD, YYYY') as match_date,
+			m.match_date,
 			m.toss_winner_team_id, 
 			m.toss_decision,
 			m.winner_team_id,

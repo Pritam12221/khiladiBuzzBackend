@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type CreateMatchRequest struct {
 	Team1ID          string   `json:"team1_id" db:"team1_id" binding:"required"`
 	Team2ID          string   `json:"team2_id" db:"team2_id" binding:"required"`
@@ -90,7 +92,7 @@ type MatchListItem struct {
 	Team2ID          string   `json:"team2_id" db:"team2_id"`
 	Status           string   `json:"status" db:"status"`
 	TotalOvers       int      `json:"total_overs" db:"total_overs"`
-	MatchDate        *string  `json:"match_date" db:"match_date"`
+	MatchDate        *time.Time `json:"match_date" db:"match_date"`
 	TossWinnerTeamID *string  `json:"toss_winner_team_id" db:"toss_winner_team_id"`
 	TossDecision     *string  `json:"toss_decision" db:"toss_decision"`
 	WinnerTeamID     *string  `json:"winner_team_id" db:"winner_team_id"`
