@@ -35,24 +35,9 @@ func UpdateInningsStatsTx(tx *sqlx.Tx, inningsID string, runsInc, wicketsInc int
 	return err
 }
 
-// UpdateNonStrikerStatsTx ensures that it makes row for the non-striker player when he comes to bat
-func UpdateNonStrikerStatsTx(tx *sqlx.Tx, inningsID string, nonStrikerID string) error {
-	_, err := tx.Exec(`
-		INSERT INTO player_match_stats (match_id, innings_id, player_id)
-		VALUES ((SELECT match_id FROM innings WHERE id = $1), $1, $2)
-		ON CONFLICT (innings_id, player_id) DO NOTHING`,
-		inningsID, nonStrikerID,
-	)
-	return err
-}
 
 // UpdateStrikerStatsTx updates the active striker (strike rotations)
-func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsScored int, isBallFaced, isBye, isLegBye bool) error {
-	runsForBatsman := runsScored
-	if isBye || isLegBye {
-		runsForBatsman = 0
-	}
-
+func UpdateStrikerStatsTx(tx *sqlx.Tx, inningsID string, strikerID string, runsForBatsman int, isBallFaced bool) error {
 	foursInc, sixesInc := 0, 0
 	switch runsForBatsman {
 	case 4:
@@ -824,21 +809,6 @@ func PopulateInningsData(match *matchRow, inn inningsRow) (models.InningsData, e
 		return models.InningsData{}, err
 	}
 	
-	if activeBowlerID != "" && inn.ActiveBowlerName != nil {
-		found := false
-		for _, bs := range bowlStats {
-			if bs.PlayerID == activeBowlerID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			bowlStats = append(bowlStats, models.BowlStat{
-				PlayerID: activeBowlerID,
-				Name:     *inn.ActiveBowlerName,
-			})
-		}
-	}
 	innData.Bowling = formatBowlingStats(bowlStats, orderedBowlersIDs, activeBowlerID)
 
 	// fetch total innings

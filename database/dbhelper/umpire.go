@@ -74,15 +74,12 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to fetch current innings: %w", err)
 	}
 
-	// Update non-striker stats if active
-	if req.NonStrikerID != nil && *req.NonStrikerID != "" {
-		if err = UpdateNonStrikerStatsTx(tx, inningsID, *req.NonStrikerID); err != nil {
-			return nil, fmt.Errorf("failed to update non-striker stats: %w", err)
-		}
-	}
-
 	// Update striker batting stats (passing isLegal)
-	if err = UpdateStrikerStatsTx(tx, inningsID, req.StrikerID, req.RunsScored, isLegal, isBye, isLegBye); err != nil {
+	runsForBatsman := req.RunsScored
+	if isBye || isLegBye {
+		runsForBatsman = 0
+	}
+	if err = UpdateStrikerStatsTx(tx, inningsID, req.StrikerID, runsForBatsman, isLegal); err != nil {
 		return nil, fmt.Errorf("failed to update striker stats: %w", err)
 	}
 
