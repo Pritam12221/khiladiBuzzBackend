@@ -229,38 +229,8 @@ func CreateTeamWithPlayers(
 		}
 
 
-		if p.Role != "" {
-			_, err = db.KhiladiDb.Exec(
-				`UPDATE player_stats SET role = $1 WHERE id = $2`,
-				p.Role,
-				newPlayer.ID,
-			)
-			if err != nil {
-				return "", err
-			}
-		}
-
 		if newPlayer.PhoneNumber != nil {
 			playerMap[*newPlayer.PhoneNumber] = newPlayer
-		}
-	}
-
-
-	for _, p := range req.Players {
-		if p.Role == "" {
-			continue
-		}
-		player, exists := playerMap[p.PhoneNumber]
-		if !exists {
-			continue
-		}
-		_, err = db.KhiladiDb.Exec(
-			`UPDATE player_stats SET role = $1 WHERE id = $2`,
-			p.Role,
-			player.ID,
-		)
-		if err != nil {
-			return "", err
 		}
 	}
 
@@ -354,7 +324,6 @@ func FetchTeamPlayers(teamID string) ([]models.Player, error) {
 func FindOrCreatePlayerForTeam(
 	name string,
 	phone string,
-	role string,
 	teamID string,
 ) (models.Player, error) {
 	var player models.Player
@@ -380,18 +349,7 @@ func FindOrCreatePlayerForTeam(
 		}
 	}
 
-	// Update role if requested
-	if role != "" {
-		_, err = db.KhiladiDb.Exec(
-			`UPDATE player_stats SET role = $1 WHERE id = $2`,
-			role,
-			player.ID,
-		)
-		if err != nil {
-			return models.Player{}, err
-		}
-		player.Role = &role
-	}
+
 
 	// Link them to the team in team_players
 	var exists bool

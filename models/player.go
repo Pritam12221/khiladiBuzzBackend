@@ -42,7 +42,6 @@ type UpdateProfileRequest struct {
 type CreatePlayerRequest struct {
 	PlayerName  string `json:"player_name" binding:"required"`
 	PhoneNumber string `json:"phone_number" binding:"required"`
-	Role        string `json:"role"`
 }
 
 type MatchRosterPlayer struct {

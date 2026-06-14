@@ -82,7 +82,7 @@ func AddPlayerToTeam(c *gin.Context) {
 		return
 	}
 
-	player, err := dbhelper.FindOrCreatePlayerForTeam(req.PlayerName, req.PhoneNumber, req.Role, teamID)
+	player, err := dbhelper.FindOrCreatePlayerForTeam(req.PlayerName, req.PhoneNumber, teamID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
