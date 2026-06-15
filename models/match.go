@@ -9,6 +9,8 @@ type CreateMatchRequest struct {
 	TossWinnerTeamID string   `json:"toss_winner_team_id" db:"toss_winner_team_id" binding:"required"`
 	TossDecision     string   `json:"toss_decision" db:"toss_decision" binding:"required,oneof=bat bowl"`
 	Status           string   `json:"status" db:"status" binding:"required,oneof=scheduled live completed cancelled"`
+	Team1Size        int      `json:"team1_size" db:"team1_size" binding:"required"`
+	Team2Size        int      `json:"team2_size" db:"team2_size" binding:"required"`
 	Team1PlayerIDs   []string `json:"team1_player_ids" binding:"required"`
 	Team2PlayerIDs   []string `json:"team2_player_ids" binding:"required"`
 	CommonPlayerID   string   `json:"common_player_id"`

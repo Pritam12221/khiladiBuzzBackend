@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS matches (
     toss_winner_team_id UUID REFERENCES teams(id),
     toss_decision toss_decision_enum,
     winner_team_id UUID REFERENCES teams(id),
+    team1_size INT,
+    team2_size INT,
     status match_status_enum DEFAULT 'scheduled',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

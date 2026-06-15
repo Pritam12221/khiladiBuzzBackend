@@ -47,9 +47,11 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 			status,
 			common_player_id,
 			host_id,
-			umpire_id
+			umpire_id,
+			team1_size,
+			team2_size
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id
 	`
 
@@ -67,6 +69,8 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 		commonPlayerID,
 		userID,
 		userID,
+		req.Team1Size,
+		req.Team2Size,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create match: %w", err)

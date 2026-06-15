@@ -612,12 +612,12 @@ func CheckAndUpdateInningsMatchCompletion(
 
 	var teamSize int
 	err := tx.Get(&teamSize, `
-		SELECT COUNT(DISTINCT player_id) 
-		FROM (
-			SELECT player_id FROM match_players WHERE match_id = $1 AND team_id = $2
-			UNION
-			SELECT common_player_id AS player_id FROM matches WHERE id = $1 AND common_player_id IS NOT NULL
-		) all_players`, matchID, battingTeamID)
+		SELECT 
+			CASE 
+				WHEN team1_id = $2 THEN team1_size 
+				ELSE team2_size 
+			END as team_size
+		FROM matches WHERE id = $1`, matchID, battingTeamID)
 	if err != nil {
 		teamSize = 11 // fallback size
 	}
@@ -823,7 +823,7 @@ func PopulateInningsData(match *matchRow, inn inningsRow) (models.InningsData, e
 		innData.TopBowlers, _ = FetchTopBowlersSummary(inn.ID, inn.BowlingTeamID)
 	}
 
-	// to handle solo player
+	// to handle nil if any of the inning data came as nil ex:summary table during live match
 	normalizeInningsData(&innData)
 
 	return innData, nil
