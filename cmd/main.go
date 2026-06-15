@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	s "khiladiBuzz/routes"
+	"khiladiBuzz/utils"
 	"github.com/joho/godotenv"
 )
 
@@ -13,6 +14,7 @@ func main() {
 	if err != nil {
 		log.Println(".env file not found")
 	}
+	utils.InitJWT()
 	err = db.ConnectAndMigrate(
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),

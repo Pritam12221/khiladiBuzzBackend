@@ -121,6 +121,12 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 			VALUES ($1, $2, $3) 
 			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, req.NonStrikerID)
 	}
+	if req.BowlerID != "" {
+		_, _ = tx.Exec(`
+			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
+			VALUES ($1, $2, $3) 
+			ON CONFLICT (innings_id, player_id) DO NOTHING`, matchID, inningsID, req.BowlerID)
+	}
 
 	if err = tx.Commit(); err != nil {
 		return "", "", err

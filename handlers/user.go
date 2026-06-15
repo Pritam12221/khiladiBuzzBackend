@@ -103,6 +103,7 @@ func LogOutUser(c* gin.Context){
 
 		if sessionId== ""{
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invlid session"})
+			return
 		}
 
 		err := dbhelper.DeleteUserSession(sessionId)

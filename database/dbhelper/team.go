@@ -32,51 +32,7 @@ func GetPlayerByPhone(
 	return player, err
 }
 
-func CreatePlayer(
-	name string,
-	phone string,
-) (models.Player, error) {
 
-	var player models.Player
-
-	query := `
-		INSERT INTO players (
-			player_name,
-			phone_number
-		)
-		VALUES ($1, $2)
-		RETURNING id, player_name, phone_number
-	`
-
-	err := db.KhiladiDb.Get(
-		&player,
-		query,
-		name,
-		phone,
-	)
-
-	return player, err
-}
-
-
-
-func FindOrCreatePlayer(
-	name string,
-	phone string,
-) (models.Player, error) {
-
-	player, err := GetPlayerByPhone(phone)
-
-	// player exists
-	if err == nil {
-		return player, nil
-	}
-
-	// create Player
-	player, err = CreatePlayer(name, phone)
-
-	return player, err
-}
 
 func CreateTeam(
 	teamName string,
