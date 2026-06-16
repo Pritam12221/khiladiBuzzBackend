@@ -86,7 +86,7 @@ func GetAllPlayers(search string, limit, offset int) ([]model.Player, error) {
 		JOIN users u ON p.user_id = u.id
 		WHERE u.archived_at IS NULL
 		  AND ($1 = '' OR u.name ILIKE '%' || $1 || '%')
-		ORDER BY p.career_runs DESC
+		ORDER BY p.career_runs DESC,p.career_highest_score DESC,p.career_sixes DESC,u.name ASC
 		LIMIT $2 OFFSET $3
 	`
 	err := db.KhiladiDb.Select(&players, query, search, limit, offset)
