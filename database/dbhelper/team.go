@@ -32,8 +32,6 @@ func GetPlayerByPhone(
 	return player, err
 }
 
-
-
 func CreateTeam(
 	teamName string,
 	captainId string,
@@ -84,15 +82,13 @@ func AddPlayerToTeam(
 	return err
 }
 
-
-
+// used when we are creating new team and we also wanna add new (guest)player in one go
 func CreateTeamWithPlayers(
 	req models.CreateTeamRequest,
 	userID string,
 ) (string, error) {
 
-
-
+	//["9098098""980890"]-all the player phone no,
 	phones := []string{}
 
 	for _, p := range req.Players {
@@ -103,7 +99,7 @@ func CreateTeamWithPlayers(
 		)
 	}
 
-
+	//find the player who already existed in the datbase based on phone no. in one query
 	query, args, err := sqlx.In(`
 		SELECT
 			p.id,
@@ -134,7 +130,7 @@ func CreateTeamWithPlayers(
 		return "", err
 	}
 
-
+	//map the the player with  name:phone no. (for existing players)
 	playerMap := map[string]models.Player{}
 
 	for _, p := range existingPlayers {
@@ -145,7 +141,7 @@ func CreateTeamWithPlayers(
 		}
 	}
 
-	// Validate that any existing phone no.
+	// Validate if any phone no.exists
 	for _, p := range req.Players {
 		existing, exists := playerMap[p.PhoneNumber]
 		if exists {
@@ -155,7 +151,7 @@ func CreateTeamWithPlayers(
 		}
 	}
 
-
+	//find missing player by looking into playerMap
 	missingPlayers := []models.CreatePlayerRequest{}
 
 	for _, p := range req.Players {
@@ -171,7 +167,7 @@ func CreateTeamWithPlayers(
 		}
 	}
 
-
+	//create player
 	for _, p := range missingPlayers {
 
 		newPlayer, err := CreateUser(
@@ -184,14 +180,13 @@ func CreateTeamWithPlayers(
 			return "", err
 		}
 
-
+		//add the newly added created player in the map
 		if newPlayer.PhoneNumber != nil {
 			playerMap[*newPlayer.PhoneNumber] = newPlayer
 		}
 	}
 
-
-
+	//find captain id from player map
 	var captainID string
 
 	for _, p := range req.Players {
@@ -213,8 +208,7 @@ func CreateTeamWithPlayers(
 		)
 	}
 
-
-
+	//create team
 	teamID, err := CreateTeam(
 		req.TeamName,
 		captainID,
@@ -225,8 +219,7 @@ func CreateTeamWithPlayers(
 		return "", err
 	}
 
-
-
+	//finaly add players to teams
 	for _, p := range req.Players {
 
 		player := playerMap[p.PhoneNumber]
@@ -243,7 +236,7 @@ func CreateTeamWithPlayers(
 	return teamID, nil
 }
 
-
+// fetch existing teans in match setting page
 func FetchTeams(userID string) ([]models.Team, error) {
 	teams := []models.Team{}
 	query := `
@@ -256,6 +249,7 @@ func FetchTeams(userID string) ([]models.Team, error) {
 	return teams, err
 }
 
+// fetch player who are associated with the existing team-for already made teams
 func FetchTeamPlayers(teamID string) ([]models.Player, error) {
 	players := []models.Player{}
 	query := `
@@ -304,8 +298,6 @@ func FindOrCreatePlayerForTeam(
 			return models.Player{}, err
 		}
 	}
-
-
 
 	// Link them to the team in team_players
 	var exists bool

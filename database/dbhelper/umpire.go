@@ -130,7 +130,7 @@ func RecordBall(inningsID string, matchID string, req models.RecordBallRequest) 
 		return nil, fmt.Errorf("failed to update next active players: %w", err)
 	}
 
-	logBalls, err := 	FetchCurrentOverBallsTx(tx, inningsID, currentInnings.TotalOvers, bowlerArg)
+	logBalls, err := FetchCurrentOverBallsTx(tx, inningsID, currentInnings.TotalOvers, bowlerArg)
 	if err != nil {
 		logBalls = []models.BallSummary{}
 	}
@@ -174,6 +174,7 @@ func InsertBallTx(tx *sqlx.Tx, inningsID string, req models.RecordBallRequest) e
 	return err
 }
 
+// rotation of stiker based on odd even run over end,solo player check
 func resolveNextActivePlayers(
 	tx *sqlx.Tx,
 	matchID string,

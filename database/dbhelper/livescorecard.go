@@ -39,8 +39,6 @@ func FetchMatchScorecard(matchID string) (*models.MatchDetail, error) {
 		}
 	}
 
-
-
 	// Fetch Squads
 	squad1, _ := FetchMatchSquad(matchID, match.TeamAID, match.TeamA)
 	if squad1 != nil {
@@ -70,28 +68,26 @@ func FetchMatchSquad(matchID, teamID, teamName string) (*models.PlayingSquad, er
 	}
 
 	return &models.PlayingSquad{
-		TeamName:  teamName,
-		Players:   players,
+		TeamName: teamName,
+		Players:  players,
 	}, nil
 }
 
-
-
 type matchRow struct {
-	ID               string  `db:"id"`
-	TeamA            string  `db:"team_a_name"`
-	TeamB            string  `db:"team_b_name"`
-	TeamAID          string  `db:"team1_id"`
-	TeamBID          string  `db:"team2_id"`
-	Status           string  `db:"status"`
-	TotalOvers       int     `db:"total_overs"`
-	TossWinnerTeamID string  `db:"toss_winner_team_id"`
-	TossDecision     string  `db:"toss_decision"`
-	CreatedAt     time.Time  `db:"created_at"`
-	WinnerTeamID     *string `db:"winner_team_id"`
-	HostID           string  `db:"host_id"`
-	HostName         *string `db:"host_name"`
-	UmpireName       *string `db:"umpire_name"`
+	ID               string    `db:"id"`
+	TeamA            string    `db:"team_a_name"`
+	TeamB            string    `db:"team_b_name"`
+	TeamAID          string    `db:"team1_id"`
+	TeamBID          string    `db:"team2_id"`
+	Status           string    `db:"status"`
+	TotalOvers       int       `db:"total_overs"`
+	TossWinnerTeamID string    `db:"toss_winner_team_id"`
+	TossDecision     string    `db:"toss_decision"`
+	CreatedAt        time.Time `db:"created_at"`
+	WinnerTeamID     *string   `db:"winner_team_id"`
+	HostID           string    `db:"host_id"`
+	HostName         *string   `db:"host_name"`
+	UmpireName       *string   `db:"umpire_name"`
 }
 
 func fetchMatchMetadata(matchID string) (*matchRow, error) {
@@ -154,7 +150,7 @@ func fetchMatchInningsRows(matchID string) ([]inningsRow, error) {
 	return innings, err
 }
 
-// FetchInningsBalls retrieves all deliveries in order for the innings
+// retrieves all deliveries in order for ball log
 func FetchInningsBalls(inningsID string) ([]models.BallRow, error) {
 	var balls []models.BallRow
 	query := `
@@ -166,7 +162,7 @@ func FetchInningsBalls(inningsID string) ([]models.BallRow, error) {
 	return balls, err
 }
 
-// FetchBattingStats fetches raw batting match stats for all squad players in a specific innings
+// batting match stats for all squad players in a specific innings
 func FetchBattingStats(matchID, inningsID, battingTeamID string) ([]models.BatStat, error) {
 	var batStats []models.BatStat
 	query := `
@@ -231,7 +227,7 @@ func FetchInningsExtras(inningsID string) (models.ExtrasSummary, error) {
 	return extras, err
 }
 
-// FetchYetToBat retrieves all batting squad players who haven't faced a ball yet
+// player who are yet to bat
 func FetchYetToBat(matchID, battingTeamID string, orderedBatsmen []string) ([]string, error) {
 	var teamPlayers []models.PlayerNameRow
 	query := `
@@ -255,7 +251,7 @@ func FetchYetToBat(matchID, battingTeamID string, orderedBatsmen []string) ([]st
 	return yetToBat, nil
 }
 
-// FetchTopBatsmenSummary returns the top 2 batsmen directly sorted by runs scored
+// the top 2 batsmen directly sorted by runs scored
 func FetchTopBatsmenSummary(inningsID, battingTeamID string) ([]models.TopBatsman, error) {
 	var rows []models.TopBatsmanRow
 	query := `
@@ -306,8 +302,6 @@ func FetchTopBowlersSummary(inningsID, bowlingTeamID string) ([]models.TopBowler
 	}
 	return topBowl, nil
 }
-
-
 
 func getOrderedBatsmen(balls []models.BallRow, activeStriker, activeNonStriker *string) []string {
 	var ordered []string

@@ -9,7 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string, error) {
+// match creation inc innings ,fetch match captains,add active player to the match
+func CreateMatch(req models.CreateMatchRequest, userID string) (string, string, error) {
 
 	tx, err := db.KhiladiDb.Beginx()
 	if err != nil {
@@ -108,7 +109,6 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 		return "", "", fmt.Errorf("failed to create innings: %w", err)
 	}
 
-
 	if req.StrikerID != "" {
 		_, _ = tx.Exec(`
 			INSERT INTO player_match_stats (match_id, innings_id, player_id) 
@@ -134,7 +134,6 @@ func 	CreateMatch(req models.CreateMatchRequest, userID string) (string, string,
 
 	return matchID, inningsID, nil
 }
-
 
 func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerIDs []string, team2ID string, team2PlayerIDs []string) error {
 	type playerSlot struct {
@@ -176,8 +175,7 @@ func AddMatchPlayersTx(tx *sqlx.Tx, matchID string, team1ID string, team1PlayerI
 	return nil
 }
 
-
-func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, error) {
+func FetchAllMatches(status string, limit, offset int) ([]models.MatchListItem, error) {
 	matches := []models.MatchListItem{}
 	query := `
 		SELECT 
@@ -214,5 +212,3 @@ func FetchAllMatches(status string,limit,offset int) ([]models.MatchListItem, er
 	}
 	return matches, nil
 }
-
-

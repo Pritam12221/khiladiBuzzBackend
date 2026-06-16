@@ -5,6 +5,7 @@ import (
 	model "khiladiBuzz/models"
 )
 
+// profile fetch
 func GetPlayerByUserID(userID string) (model.Player, error) {
 	var player model.Player
 	query := `
