@@ -1,14 +1,14 @@
-version: '3.6'
+version: "3.6"
 
 #services describe the containers that will start
 services:
   db:
     container_name: postgres
-
+    restart: on-failure
     image: "postgres:16"
 
     ports:
-      - "5433:5432"
+      - "5439:5432"
 
     volumes:
       - ./pgdata:/var/lib/postgresql/data
@@ -17,3 +17,21 @@ services:
       - POSTGRES_USER=delta
       - POSTGRES_PASSWORD=delta#
       - POSTGRES_DB=khiladi-db
+
+  backend:
+    container_name: khiladi-backend
+    image: "pritam00007/khiladi-backend:latest"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9000:8080"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=khiladi-db
+      - DB_USER=delta
+      - DB_PASSWORD=delta#
+      - DB_SSLMODE=disable
