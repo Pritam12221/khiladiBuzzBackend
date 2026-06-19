@@ -5,6 +5,7 @@ import (
 	"khiladiBuzz/middleware"
 	"net/http"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,6 +13,12 @@ func ServerRoutes() *gin.Engine {
 
 	r := gin.Default()
 
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowCredentials: true,
+	}))
 	serverCheck := r.Group("/v1")
 	{
 		serverCheck.POST("/health", func(c *gin.Context) {
@@ -30,7 +37,7 @@ func ServerRoutes() *gin.Engine {
 		userRoutes.POST("/forgot-password", handlers.ForgotPassword)
 	}
 
-	// Public routes 
+	// Public routes
 	publicRoutes := r.Group("/v1")
 	{
 		publicRoutes.GET("/matches", handlers.FetchAllMatches)
@@ -38,16 +45,16 @@ func ServerRoutes() *gin.Engine {
 		publicRoutes.GET("/players", handlers.FetchAllPlayers)
 	}
 
-	authRoutes:=r.Group("/v1")
+	authRoutes := r.Group("/v1")
 	authRoutes.Use(middleware.AuthMiddleware())
 	{
-		
+
 		authRoutes.POST("/logout", handlers.LogOutUser)
 		authRoutes.GET("/profile", handlers.GetProfile)
 		authRoutes.PUT("/updateprofile", handlers.UpdateProfile)
 		authRoutes.GET("/fetchteams", handlers.FetchTeams)
 
-		// Teams 
+		// Teams
 		teams := authRoutes.Group("/teams")
 		{
 			teams.POST("", handlers.CreateTeam)
@@ -55,7 +62,7 @@ func ServerRoutes() *gin.Engine {
 			teams.POST("/:id/players", handlers.AddPlayerToTeam)
 		}
 
-		// Matches 
+		// Matches
 		matches := authRoutes.Group("/matches")
 		{
 			matches.POST("", handlers.CreateMatch)
@@ -63,7 +70,7 @@ func ServerRoutes() *gin.Engine {
 			matches.POST("/:id/innings/:innings_id/ball", handlers.RecordBall)
 		}
 
-		// Innings 
+		// Innings
 		innings := authRoutes.Group("/innings")
 		{
 			innings.GET("/:id/players", handlers.GetInningsPlayers)
@@ -71,12 +78,12 @@ func ServerRoutes() *gin.Engine {
 			innings.POST("/:id/undo", handlers.UndoLastBall)
 		}
 
-		// Players 
+		// Players
 		players := authRoutes.Group("/players")
 		{
 			players.GET("/search", handlers.SearchPlayers)
 		}
 	}
 
-	return r;
+	return r
 }
